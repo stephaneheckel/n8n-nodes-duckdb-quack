@@ -1,11 +1,16 @@
 {
   "name": "n8n-nodes-duckdb-quack",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "n8n community node for local DuckDB files and high-performance remote Quack servers — in-process OLAP with HTTP/2 streaming vectors",
   "license": "MIT",
   "homepage": "https://github.com/stephaneheckel/n8n-nodes-duckdb-quack#readme",
-  "keywords": ["n8n-community-node-package"],
-  "author": { "name": "Stéphane Heckel", "email": "stephane.heckel@gmail.com" },
+  "keywords": [
+    "n8n-community-node-package"
+  ],
+  "author": {
+    "name": "Stéphane Heckel",
+    "email": "stephane.heckel@gmail.com"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/stephaneheckel/n8n-nodes-duckdb-quack.git"
@@ -19,7 +24,9 @@
     "release": "n8n-node release",
     "prepublishOnly": "n8n-node prerelease"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "n8n": {
     "n8nNodesApiVersion": 1,
     "strict": false,
