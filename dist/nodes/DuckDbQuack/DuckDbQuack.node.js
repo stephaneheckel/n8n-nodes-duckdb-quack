@@ -499,6 +499,15 @@ class DuckDbQuack {
                 const result = await connection.runAndReadAll(`FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`);
                 return result.getRowObjectsJson();
             };
+            const runRemoteDml = async (creds, sql) => {
+                const host = creds.host || 'quack:localhost:9494';
+                const token = creds.token;
+                const disableSsl = creds.disableSsl;
+                const escapedSql = sql.replace(/'/g, "''");
+                const tokenArg = token ? `, token := '${token.replace(/'/g, "''")}'` : '';
+                const sslArg = disableSsl ? ', disable_ssl := true' : '';
+                await connection.runAndReadAll(`FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`);
+            };
             if (resource === 'table') {
                 const op = this.getNodeParameter('operation', 0);
                 if (op === 'listColumns') {
@@ -674,7 +683,7 @@ class DuckDbQuack {
                 else if (op === 'update') {
                     const rawTable = this.getNodeParameter('tableName', 0);
                     const table = isRemote
-                        ? `target_db.${rawTable}`
+                        ? rawTable
                         : validateTableName(rawTable, this.getNode(), 0);
                     const keyCol = this.getNodeParameter('keyColumn', 0);
                     const escapedKeyCol = validateTableName(keyCol, this.getNode(), 0);
@@ -702,7 +711,12 @@ class DuckDbQuack {
                                 continue;
                             const sql = `UPDATE ${table} SET ${setCols} WHERE ${escapedKeyCol} = ${escapeLiteral(keyVal)};`;
                             try {
-                                await connection.run(sql);
+                                if (isRemote) {
+                                    await runRemoteDml(credentials, sql);
+                                }
+                                else {
+                                    await connection.run(sql);
+                                }
                                 updated++;
                             }
                             catch (itemError) {
@@ -728,7 +742,7 @@ class DuckDbQuack {
                 else if (op === 'delete') {
                     const rawTable = this.getNodeParameter('tableName', 0);
                     const table = isRemote
-                        ? `target_db.${rawTable}`
+                        ? rawTable
                         : validateTableName(rawTable, this.getNode(), 0);
                     const whereClause = this.getNodeParameter('whereClause', 0).trim();
                     if (!whereClause) {
@@ -739,8 +753,13 @@ class DuckDbQuack {
                         ? await runRemoteQuery(credentials, countSql)
                         : (await connection.runAndReadAll(countSql)).getRowObjectsJson();
                     const deleted = Number((_b = (_a = countRows[0]) === null || _a === void 0 ? void 0 : _a.cnt) !== null && _b !== void 0 ? _b : 0);
-                    const sql = `DELETE FROM ${table} WHERE ${whereClause};`;
-                    await connection.run(sql);
+                    if (isRemote) {
+                        await runRemoteDml(credentials, `DELETE FROM ${rawTable} WHERE ${whereClause};`);
+                    }
+                    else {
+                        const sql = `DELETE FROM ${table} WHERE ${whereClause};`;
+                        await connection.run(sql);
+                    }
                     returnData.push({
                         json: { rows_deleted: deleted },
                         pairedItem: { item: 0 },

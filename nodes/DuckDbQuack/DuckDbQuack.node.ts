@@ -555,8 +555,25 @@ export class DuckDbQuack implements INodeType {
 				return result.getRowObjectsJson();
 			};
 
-			// ========================== TABLE ==========================
-			if (resource === 'table') {
+			// Helper: run DML (UPDATE/DELETE) via stateless quack_query for remote
+				const runRemoteDml = async (
+					creds: Record<string, unknown>,
+					sql: string,
+				): Promise<void> => {
+					const host = (creds.host as string) || 'quack:localhost:9494';
+					const token = creds.token as string;
+					const disableSsl = creds.disableSsl as boolean;
+					const escapedSql = sql.replace(/'/g, "''");
+					const tokenArg = token ? `, token := '${token.replace(/'/g, "''")}'` : '';
+					const sslArg = disableSsl ? ', disable_ssl := true' : '';
+					// DML via quack_query returns empty — runAndReadAll handles this fine
+					await connection.runAndReadAll(
+						`FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`,
+					);
+				};
+
+				// ========================== TABLE ==========================
+				if (resource === 'table') {
 				const op = this.getNodeParameter('operation', 0) as string;
 
 				if (op === 'listColumns') {
@@ -743,67 +760,69 @@ export class DuckDbQuack implements INodeType {
 					}
 				} else if (op === 'update') {
 							const rawTable = this.getNodeParameter('tableName', 0) as string;
-							// Remote: ATTACH needs target_db.main.employee, local keeps main.employee
 							const table = isRemote
-								? `target_db.${rawTable}`
+								? rawTable
 								: validateTableName(rawTable, this.getNode(), 0);
-					const keyCol = this.getNodeParameter('keyColumn', 0) as string;
-					const escapedKeyCol = validateTableName(keyCol, this.getNode(), 0);
+							const keyCol = this.getNodeParameter('keyColumn', 0) as string;
+							const escapedKeyCol = validateTableName(keyCol, this.getNode(), 0);
 
-					if (items.length === 0) {
-						returnData.push({
-							json: { rows_updated: 0 } as unknown as IDataObject,
-							pairedItem: { item: 0 },
-						});
-					} else {
-						let updated = 0;
-						for (let i = 0; i < items.length; i++) {
-							const row = items[i].json;
-							const keyVal = row[keyCol];
-							if (keyVal === undefined || keyVal === null) continue;
+							if (items.length === 0) {
+								returnData.push({
+									json: { rows_updated: 0 } as unknown as IDataObject,
+									pairedItem: { item: 0 },
+								});
+							} else {
+								let updated = 0;
+								for (let i = 0; i < items.length; i++) {
+									const row = items[i].json;
+									const keyVal = row[keyCol];
+									if (keyVal === undefined || keyVal === null) continue;
 
-							const setCols = Object.keys(row)
-								.filter((k) => k !== keyCol)
-								.map((k) => {
-									const col = validateTableName(k, this.getNode(), i);
-									return `${col} = ${escapeLiteral(row[k])}`;
-								})
-								.join(', ');
+									const setCols = Object.keys(row)
+										.filter((k) => k !== keyCol)
+										.map((k) => {
+											const col = validateTableName(k, this.getNode(), i);
+											return `${col} = ${escapeLiteral(row[k])}`;
+										})
+										.join(', ');
 
-							if (!setCols) continue;
+									if (!setCols) continue;
 
-							const sql = `UPDATE ${table} SET ${setCols} WHERE ${escapedKeyCol} = ${escapeLiteral(keyVal)};`;
-							try {
-								await connection.run(sql);
-								updated++;
-							} catch (itemError) {
-								if (this.continueOnFail()) {
-									returnData.push({
-										json: {
-											error: (itemError as Error).message,
-										} as unknown as IDataObject,
-										error: itemError as NodeOperationError,
-										pairedItem: { item: i },
-									});
-									continue;
+									const sql = `UPDATE ${table} SET ${setCols} WHERE ${escapedKeyCol} = ${escapeLiteral(keyVal)};`;
+									try {
+										if (isRemote) {
+											await runRemoteDml(credentials, sql);
+										} else {
+											await connection.run(sql);
+										}
+										updated++;
+									} catch (itemError) {
+										if (this.continueOnFail()) {
+											returnData.push({
+												json: {
+													error: (itemError as Error).message,
+												} as unknown as IDataObject,
+												error: itemError as NodeOperationError,
+												pairedItem: { item: i },
+											});
+											continue;
+										}
+										throw new NodeApiError(
+											this.getNode(),
+											itemError as unknown as JsonObject,
+											{ itemIndex: i },
+										);
+									}
 								}
-								throw new NodeApiError(
-									this.getNode(),
-									itemError as unknown as JsonObject,
-									{ itemIndex: i },
-								);
+								returnData.push({
+									json: { rows_updated: updated } as unknown as IDataObject,
+									pairedItem: { item: 0 },
+								});
 							}
-						}
-						returnData.push({
-							json: { rows_updated: updated } as unknown as IDataObject,
-							pairedItem: { item: 0 },
-						});
-					}
 				} else if (op === 'delete') {
 							const rawTable = this.getNodeParameter('tableName', 0) as string;
-							// Remote: ATTACH needs target_db.main.employee, local keeps main.employee
 							const table = isRemote
-								? `target_db.${rawTable}`
+								? rawTable
 								: validateTableName(rawTable, this.getNode(), 0);
 							const whereClause = (this.getNodeParameter('whereClause', 0) as string).trim();
 
@@ -815,20 +834,25 @@ export class DuckDbQuack implements INodeType {
 								);
 							}
 
-							// Count matching rows first — use rawTable for runRemoteQuery (sends directly to Quack)
+							// Count matching rows first
 							const countSql = `SELECT COUNT(*) AS cnt FROM ${rawTable} WHERE ${whereClause};`;
-						const countRows = isRemote
-							? await runRemoteQuery(credentials, countSql)
-							: (await connection.runAndReadAll(countSql)).getRowObjectsJson();
-						const deleted = Number(countRows[0]?.cnt ?? 0);
+							const countRows = isRemote
+								? await runRemoteQuery(credentials, countSql)
+								: (await connection.runAndReadAll(countSql)).getRowObjectsJson();
+							const deleted = Number(countRows[0]?.cnt ?? 0);
 
-						const sql = `DELETE FROM ${table} WHERE ${whereClause};`;
-						await connection.run(sql);
-						returnData.push({
-							json: { rows_deleted: deleted } as unknown as IDataObject,
-							pairedItem: { item: 0 },
-						});
-					}
+							// Remote: send DELETE via quack_query (ATTACH doesn't support DML on Quack tables)
+							if (isRemote) {
+								await runRemoteDml(credentials, `DELETE FROM ${rawTable} WHERE ${whereClause};`);
+							} else {
+								const sql = `DELETE FROM ${table} WHERE ${whereClause};`;
+								await connection.run(sql);
+							}
+							returnData.push({
+								json: { rows_deleted: deleted } as unknown as IDataObject,
+								pairedItem: { item: 0 },
+							});
+						}
 			}
 
 			// ========================== QUERY ==========================
