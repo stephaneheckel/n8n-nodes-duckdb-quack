@@ -740,8 +740,10 @@ export class DuckDbQuack implements INodeType {
 						}
 					}
 				} else if (op === 'update') {
-					const rawTable = this.getNodeParameter('tableName', 0) as string;
-					const table = validateTableName(rawTable, this.getNode(), 0);
+							const rawTable = this.getNodeParameter('tableName', 0) as string;
+							// Remote: dropdown returns "main.employee" but ATTACH needs just "employee"
+							const unqualified = isRemote && rawTable.includes('.') ? rawTable.split('.').pop()! : rawTable;
+							const table = validateTableName(unqualified, this.getNode(), 0);
 					const keyCol = this.getNodeParameter('keyColumn', 0) as string;
 					const escapedKeyCol = validateTableName(keyCol, this.getNode(), 0);
 
@@ -795,8 +797,10 @@ export class DuckDbQuack implements INodeType {
 						});
 					}
 				} else if (op === 'delete') {
-						const rawTable = this.getNodeParameter('tableName', 0) as string;
-						const table = validateTableName(rawTable, this.getNode(), 0);
+							const rawTable = this.getNodeParameter('tableName', 0) as string;
+							// Remote: dropdown returns "main.employee" but ATTACH needs just "employee"
+							const unqualified = isRemote && rawTable.includes('.') ? rawTable.split('.').pop()! : rawTable;
+							const table = validateTableName(unqualified, this.getNode(), 0);
 						const whereClause = (this.getNodeParameter('whereClause', 0) as string).trim();
 
 						if (!whereClause) {
