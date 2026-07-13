@@ -807,10 +807,17 @@ export class DuckDbQuack implements INodeType {
 							);
 						}
 
+						// Count matching rows first so we can report the number
+						const countSql = `SELECT COUNT(*) AS cnt FROM ${table} WHERE ${whereClause};`;
+						const countRows = isRemote
+							? await runRemoteQuery(credentials, countSql)
+							: (await connection.runAndReadAll(countSql)).getRowObjectsJson();
+						const deleted = Number(countRows[0]?.cnt ?? 0);
+
 						const sql = `DELETE FROM ${table} WHERE ${whereClause};`;
 						await connection.run(sql);
 						returnData.push({
-							json: { rows_deleted: 'Deleted' } as unknown as IDataObject,
+							json: { rows_deleted: deleted } as unknown as IDataObject,
 							pairedItem: { item: 0 },
 						});
 					}

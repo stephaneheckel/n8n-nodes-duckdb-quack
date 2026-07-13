@@ -397,6 +397,7 @@ class DuckDbQuack {
         };
     }
     async execute() {
+        var _a, _b;
         const items = this.getInputData();
         const returnData = [];
         const resource = this.getNodeParameter('resource', 0);
@@ -729,10 +730,15 @@ class DuckDbQuack {
                     if (!whereClause) {
                         throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'DELETE requires a WHERE clause. Use SQL Query for unconstrained deletes.', { itemIndex: 0 });
                     }
+                    const countSql = `SELECT COUNT(*) AS cnt FROM ${table} WHERE ${whereClause};`;
+                    const countRows = isRemote
+                        ? await runRemoteQuery(credentials, countSql)
+                        : (await connection.runAndReadAll(countSql)).getRowObjectsJson();
+                    const deleted = Number((_b = (_a = countRows[0]) === null || _a === void 0 ? void 0 : _a.cnt) !== null && _b !== void 0 ? _b : 0);
                     const sql = `DELETE FROM ${table} WHERE ${whereClause};`;
                     await connection.run(sql);
                     returnData.push({
-                        json: { rows_deleted: 'Deleted' },
+                        json: { rows_deleted: deleted },
                         pairedItem: { item: 0 },
                     });
                 }
