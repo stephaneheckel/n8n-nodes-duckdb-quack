@@ -1,0 +1,49 @@
+{
+  "name": "n8n-nodes-duckdb-quack",
+  "version": "0.1.0",
+  "description": "n8n community node for local DuckDB files and high-performance remote Quack servers — in-process OLAP with HTTP/2 streaming vectors",
+  "license": "MIT",
+  "homepage": "https://github.com/stephaneheckel/n8n-nodes-duckdb-quack#readme",
+  "keywords": ["n8n-community-node-package"],
+  "author": { "name": "Stéphane Heckel", "email": "stephane.heckel@gmail.com" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stephaneheckel/n8n-nodes-duckdb-quack.git"
+  },
+  "scripts": {
+    "build": "n8n-node build",
+    "build:watch": "tsc --watch",
+    "dev": "n8n-node dev",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "release": "n8n-node release",
+    "prepublishOnly": "n8n-node prerelease"
+  },
+  "files": ["dist"],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": false,
+    "credentials": [
+      "dist/credentials/DuckDbQuackApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/DuckDbQuack/DuckDbQuack.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@n8n/node-cli": "*",
+    "@types/node": "^26.1.1",
+    "eslint": "9.39.4",
+    "n8n-workflow": "^2.16.0",
+    "prettier": "3.8.3",
+    "release-it": "20.2.0",
+    "typescript": "5.9.3"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "^1.5.4-r.1"
+  }
+}
