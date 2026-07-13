@@ -741,9 +741,10 @@ export class DuckDbQuack implements INodeType {
 					}
 				} else if (op === 'update') {
 							const rawTable = this.getNodeParameter('tableName', 0) as string;
-							// Remote: dropdown returns "main.employee" but ATTACH needs just "employee"
-							const unqualified = isRemote && rawTable.includes('.') ? rawTable.split('.').pop()! : rawTable;
-							const table = validateTableName(unqualified, this.getNode(), 0);
+							// Remote: ATTACH needs target_db.main.employee, local keeps main.employee
+							const table = isRemote
+								? `target_db.${rawTable}`
+								: validateTableName(rawTable, this.getNode(), 0);
 					const keyCol = this.getNodeParameter('keyColumn', 0) as string;
 					const escapedKeyCol = validateTableName(keyCol, this.getNode(), 0);
 
@@ -798,21 +799,22 @@ export class DuckDbQuack implements INodeType {
 					}
 				} else if (op === 'delete') {
 							const rawTable = this.getNodeParameter('tableName', 0) as string;
-							// Remote: dropdown returns "main.employee" but ATTACH needs just "employee"
-							const unqualified = isRemote && rawTable.includes('.') ? rawTable.split('.').pop()! : rawTable;
-							const table = validateTableName(unqualified, this.getNode(), 0);
-						const whereClause = (this.getNodeParameter('whereClause', 0) as string).trim();
+							// Remote: ATTACH needs target_db.main.employee, local keeps main.employee
+							const table = isRemote
+								? `target_db.${rawTable}`
+								: validateTableName(rawTable, this.getNode(), 0);
+							const whereClause = (this.getNodeParameter('whereClause', 0) as string).trim();
 
-						if (!whereClause) {
-							throw new NodeOperationError(
-								this.getNode(),
-								'DELETE requires a WHERE clause. Use SQL Query for unconstrained deletes.',
-								{ itemIndex: 0 },
-							);
-						}
+							if (!whereClause) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'DELETE requires a WHERE clause. Use SQL Query for unconstrained deletes.',
+									{ itemIndex: 0 },
+								);
+							}
 
-						// Count matching rows first so we can report the number
-						const countSql = `SELECT COUNT(*) AS cnt FROM ${table} WHERE ${whereClause};`;
+							// Count matching rows first — use rawTable for runRemoteQuery (sends directly to Quack)
+							const countSql = `SELECT COUNT(*) AS cnt FROM ${rawTable} WHERE ${whereClause};`;
 						const countRows = isRemote
 							? await runRemoteQuery(credentials, countSql)
 							: (await connection.runAndReadAll(countSql)).getRowObjectsJson();

@@ -673,8 +673,9 @@ class DuckDbQuack {
                 }
                 else if (op === 'update') {
                     const rawTable = this.getNodeParameter('tableName', 0);
-                    const unqualified = isRemote && rawTable.includes('.') ? rawTable.split('.').pop() : rawTable;
-                    const table = validateTableName(unqualified, this.getNode(), 0);
+                    const table = isRemote
+                        ? `target_db.${rawTable}`
+                        : validateTableName(rawTable, this.getNode(), 0);
                     const keyCol = this.getNodeParameter('keyColumn', 0);
                     const escapedKeyCol = validateTableName(keyCol, this.getNode(), 0);
                     if (items.length === 0) {
@@ -726,13 +727,14 @@ class DuckDbQuack {
                 }
                 else if (op === 'delete') {
                     const rawTable = this.getNodeParameter('tableName', 0);
-                    const unqualified = isRemote && rawTable.includes('.') ? rawTable.split('.').pop() : rawTable;
-                    const table = validateTableName(unqualified, this.getNode(), 0);
+                    const table = isRemote
+                        ? `target_db.${rawTable}`
+                        : validateTableName(rawTable, this.getNode(), 0);
                     const whereClause = this.getNodeParameter('whereClause', 0).trim();
                     if (!whereClause) {
                         throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'DELETE requires a WHERE clause. Use SQL Query for unconstrained deletes.', { itemIndex: 0 });
                     }
-                    const countSql = `SELECT COUNT(*) AS cnt FROM ${table} WHERE ${whereClause};`;
+                    const countSql = `SELECT COUNT(*) AS cnt FROM ${rawTable} WHERE ${whereClause};`;
                     const countRows = isRemote
                         ? await runRemoteQuery(credentials, countSql)
                         : (await connection.runAndReadAll(countSql)).getRowObjectsJson();
