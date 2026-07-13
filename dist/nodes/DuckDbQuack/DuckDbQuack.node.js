@@ -538,7 +538,7 @@ class DuckDbQuack {
                                     if (typeof val === 'string') {
                                         if (/^\d{4}-\d{2}-\d{2}$/.test(val))
                                             return `DATE '${val}'`;
-                                        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(val))
+                                        if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(val))
                                             return `TIMESTAMP '${val}'`;
                                         return `'${val.replace(/'/g, "''")}'`;
                                     }

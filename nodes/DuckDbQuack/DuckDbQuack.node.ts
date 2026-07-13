@@ -595,9 +595,9 @@ export class DuckDbQuack implements INodeType {
 															// Detect ISO dates: YYYY-MM-DD
 															if (/^\d{4}-\d{2}-\d{2}$/.test(val))
 																return `DATE '${val}'`;
-															// Detect timestamps: YYYY-MM-DD HH:MM:SS
-															if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(val))
-																return `TIMESTAMP '${val}'`;
+															// Detect timestamps: YYYY-MM-DD[ T]HH:MM:SS[.fff]
+																									if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(val))
+																										return `TIMESTAMP '${val}'`;
 															return `'${val.replace(/'/g, "''")}'`;
 														}
 														return String(val);
