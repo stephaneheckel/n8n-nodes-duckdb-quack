@@ -244,8 +244,8 @@ export class DuckDbQuack implements INodeType {
 				name: 'tableName',
 				type: 'string',
 				displayOptions: {
-							show: { resource: ['table'], operation: ['write', 'update', 'delete'] },
-						},
+						show: { resource: ['table'], operation: ['write'] },
+					},
 				default: '',
 				required: true,
 				placeholder: 'my_table',

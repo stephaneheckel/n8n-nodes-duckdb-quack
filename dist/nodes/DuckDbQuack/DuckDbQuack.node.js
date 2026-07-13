@@ -227,7 +227,7 @@ class DuckDbQuack {
                     name: 'tableName',
                     type: 'string',
                     displayOptions: {
-                        show: { resource: ['table'], operation: ['write', 'update', 'delete'] },
+                        show: { resource: ['table'], operation: ['write'] },
                     },
                     default: '',
                     required: true,
