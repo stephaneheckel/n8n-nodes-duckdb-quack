@@ -391,7 +391,7 @@ class DuckDbQuack {
         };
     }
     async execute() {
-        var _a, _b;
+        var _a, _b, _c, _d;
         const items = this.getInputData();
         const returnData = [];
         const resource = this.getNodeParameter('resource', 0);
@@ -687,6 +687,11 @@ class DuckDbQuack {
                     if (!setColumns) {
                         throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'UPDATE requires Set Columns. Provide comma-separated column=value pairs.', { itemIndex: 0 });
                     }
+                    const countSql = `SELECT COUNT(*) AS cnt FROM ${rawTable} WHERE ${whereClause};`;
+                    const countRows = isRemote
+                        ? await runRemoteQuery(credentials, countSql)
+                        : (await connection.runAndReadAll(countSql)).getRowObjectsJson();
+                    const updated = Number((_b = (_a = countRows[0]) === null || _a === void 0 ? void 0 : _a.cnt) !== null && _b !== void 0 ? _b : 0);
                     const sql = `UPDATE ${table} SET ${setColumns} WHERE ${whereClause};`;
                     if (isRemote) {
                         await runRemoteDml(credentials, sql);
@@ -695,7 +700,7 @@ class DuckDbQuack {
                         await connection.run(sql);
                     }
                     returnData.push({
-                        json: { rows_updated: 'Updated' },
+                        json: { rows_updated: updated },
                         pairedItem: { item: 0 },
                     });
                 }
@@ -712,7 +717,7 @@ class DuckDbQuack {
                     const countRows = isRemote
                         ? await runRemoteQuery(credentials, countSql)
                         : (await connection.runAndReadAll(countSql)).getRowObjectsJson();
-                    const deleted = Number((_b = (_a = countRows[0]) === null || _a === void 0 ? void 0 : _a.cnt) !== null && _b !== void 0 ? _b : 0);
+                    const deleted = Number((_d = (_c = countRows[0]) === null || _c === void 0 ? void 0 : _c.cnt) !== null && _d !== void 0 ? _d : 0);
                     if (isRemote) {
                         await runRemoteDml(credentials, `DELETE FROM ${rawTable} WHERE ${whereClause};`);
                     }

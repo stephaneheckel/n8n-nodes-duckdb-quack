@@ -774,17 +774,26 @@ export class DuckDbQuack implements INodeType {
 								);
 							}
 
-							const sql = `UPDATE ${table} SET ${setColumns} WHERE ${whereClause};`;
-							if (isRemote) {
-								await runRemoteDml(credentials, sql);
-							} else {
-								await connection.run(sql);
-							}
-							returnData.push({
-								json: { rows_updated: 'Updated' } as unknown as IDataObject,
-								pairedItem: { item: 0 },
+								// Count matching rows first
+								const countSql = `SELECT COUNT(*) AS cnt FROM ${rawTable} WHERE ${whereClause};`;
+								const countRows = isRemote
+									? await runRemoteQuery(credentials, countSql)
+									: (await connection.runAndReadAll(countSql)).getRowObjectsJson();
+								const updated = Number(countRows[0]?.cnt ?? 0);
+
+								const sql = `UPDATE ${table} SET ${setColumns} WHERE ${whereClause};`;
+
+								// Remote: send UPDATE via quack_query (ATTACH doesn't support DML on Quack tables)
+								if (isRemote) {
+									await runRemoteDml(credentials, sql);
+								} else {
+									await connection.run(sql);
+								}
+								returnData.push({
+									json: { rows_updated: updated } as unknown as IDataObject,
+									pairedItem: { item: 0 },
 								});
-								} else if (op === 'delete') {
+							} else if (op === 'delete') {
 							const rawTable = this.getNodeParameter('tableName', 0) as string;
 							const table = isRemote
 								? rawTable
