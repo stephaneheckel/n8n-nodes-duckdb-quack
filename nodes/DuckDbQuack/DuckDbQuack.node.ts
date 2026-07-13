@@ -339,17 +339,15 @@ export class DuckDbQuack implements INodeType {
 							"Input item keys other than the Key Column are used as SET values.\nExample: { \"id\": 42, \"status\": \"done\" } → UPDATE table SET status='done' WHERE id=42",
 					},
 					{
-						displayName: 'Where Column',
-						name: 'whereColumn',
+						displayName: 'Filter (WHERE Clause)',
+						name: 'whereClause',
 						type: 'string',
-						displayOptions: {
-							show: { resource: ['table'], operation: ['delete'] },
-						},
+						displayOptions: { show: { resource: ['table'], operation: ['delete'] } },
 						default: '',
 						required: true,
-						placeholder: 'id',
+						placeholder: "id=1 OR status='inactive'",
 						description:
-									'Column name used in the WHERE clause (e.g. "id"). Each input item provides the value to match against this column.',
+							'SQL WHERE conditions. Required as a safety guard — empty WHERE = no delete.',
 					},
 
 					// ======================== QUERY ========================
@@ -797,51 +795,25 @@ export class DuckDbQuack implements INodeType {
 						});
 					}
 				} else if (op === 'delete') {
-					const rawTable = this.getNodeParameter('tableName', 0) as string;
-					const table = validateTableName(rawTable, this.getNode(), 0);
-					const whereCol = this.getNodeParameter('whereColumn', 0) as string;
-					const escapedWhereCol = validateTableName(whereCol, this.getNode(), 0);
+						const rawTable = this.getNodeParameter('tableName', 0) as string;
+						const table = validateTableName(rawTable, this.getNode(), 0);
+						const whereClause = (this.getNodeParameter('whereClause', 0) as string).trim();
 
-					if (items.length === 0) {
-						returnData.push({
-							json: { rows_deleted: 0 } as unknown as IDataObject,
-							pairedItem: { item: 0 },
-						});
-					} else {
-						let deleted = 0;
-						for (let i = 0; i < items.length; i++) {
-							const row = items[i].json;
-							const whereVal = row[whereCol];
-							if (whereVal === undefined || whereVal === null) continue;
-
-							const sql = `DELETE FROM ${table} WHERE ${escapedWhereCol} = ${escapeLiteral(whereVal)};`;
-							try {
-								await connection.run(sql);
-								deleted++;
-							} catch (itemError) {
-								if (this.continueOnFail()) {
-									returnData.push({
-										json: {
-											error: (itemError as Error).message,
-										} as unknown as IDataObject,
-										error: itemError as NodeOperationError,
-										pairedItem: { item: i },
-									});
-									continue;
-								}
-								throw new NodeApiError(
-									this.getNode(),
-									itemError as unknown as JsonObject,
-									{ itemIndex: i },
-								);
-							}
+						if (!whereClause) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'DELETE requires a WHERE clause. Use SQL Query for unconstrained deletes.',
+								{ itemIndex: 0 },
+							);
 						}
+
+						const sql = `DELETE FROM ${table} WHERE ${whereClause};`;
+						await connection.run(sql);
 						returnData.push({
-							json: { rows_deleted: deleted } as unknown as IDataObject,
+							json: { rows_deleted: 'Deleted' } as unknown as IDataObject,
 							pairedItem: { item: 0 },
 						});
 					}
-				}
 			}
 
 			// ========================== QUERY ==========================
