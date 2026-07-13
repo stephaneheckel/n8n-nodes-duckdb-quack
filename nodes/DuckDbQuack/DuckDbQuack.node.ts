@@ -702,8 +702,10 @@ export class DuckDbQuack implements INodeType {
 
 					if (fs.existsSync(dest)) {
 						if (overwrite) {
-							fs.unlinkSync(dest);
-						} else {
+										fs.unlinkSync(dest);
+										// Clear cached instance so next read gets fresh data
+										instanceCache.delete(dest);
+									} else {
 							throw new NodeOperationError(
 								this.getNode(),
 								`Target file already exists: ${dest}. Enable "Force Overwrite" to replace it.`,

@@ -630,6 +630,7 @@ class DuckDbQuack {
                     if (fs.existsSync(dest)) {
                         if (overwrite) {
                             fs.unlinkSync(dest);
+                            instanceCache.delete(dest);
                         }
                         else {
                             throw new n8n_workflow_1.NodeOperationError(this.getNode(), `Target file already exists: ${dest}. Enable "Force Overwrite" to replace it.`, { itemIndex: 0 });
