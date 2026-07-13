@@ -718,12 +718,23 @@ export class DuckDbQuack implements INodeType {
 					);
 					const tables = tablesResult.getRowObjectsJson();
 					let copied = 0;
-					for (const t of tables) {
-						const name = t.table_name as string;
-						await connection.run(
-							`CREATE TABLE disk_db.main.${name} AS SELECT * FROM main.${name};`,
-						);
-						copied++;
+							for (const t of tables) {
+								const name = t.table_name as string;
+								// Check if table already exists in disk_db
+												const diskTables = await connection.runAndReadAll(
+									`SELECT table_name FROM duckdb_tables() WHERE database_name='disk_db' AND schema_name='main' AND table_name='${name}'`,
+								);
+								const tableExists = diskTables.getRowObjectsJson().length > 0;
+								if (tableExists) {
+									await connection.run(
+										`INSERT INTO disk_db.main.${name} SELECT * FROM main.${name};`,
+									);
+								} else {
+									await connection.run(
+										`CREATE TABLE disk_db.main.${name} AS SELECT * FROM main.${name};`,
+									);
+								}
+								copied++;
 					}
 					await connection.run(`DETACH disk_db;`);
 					returnData.push({
