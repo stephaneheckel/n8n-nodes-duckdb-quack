@@ -479,12 +479,14 @@ export class DuckDbQuack implements INodeType {
 				}
 			}
 
-			// --- Connect: remote ATTACH only needed for write/select operations ---
+			// --- Connect: remote ATTACH needed for mutate operations + query ---
 				const isRemote = credentials.connectionType === 'remote';
 				const needsAttach = isRemote &&
-					(resource === 'query' ||
-						(resource === 'table' &&
-							(this.getNodeParameter('operation', 0) as string) === 'write'));
+							(resource === 'query' ||
+								(resource === 'table' &&
+									['write', 'update', 'delete'].includes(
+										this.getNodeParameter('operation', 0) as string,
+									)));
 
 				if (needsAttach) {
 				const host = (credentials.host as string) || 'quack:localhost:9494';

@@ -450,7 +450,7 @@ class DuckDbQuack {
             const needsAttach = isRemote &&
                 (resource === 'query' ||
                     (resource === 'table' &&
-                        this.getNodeParameter('operation', 0) === 'write'));
+                        ['write', 'update', 'delete'].includes(this.getNodeParameter('operation', 0))));
             if (needsAttach) {
                 const host = credentials.host || 'quack:localhost:9494';
                 const token = credentials.token;
