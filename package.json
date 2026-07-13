@@ -41,8 +41,9 @@
     "typescript": "5.9.3"
   },
   "peerDependencies": {
-  "n8n-workflow": "*",
-  "@duckdb/node-api": "^1.5.4-r.1"
+    "n8n-workflow": "*"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@duckdb/node-api": "^1.5.4-r.1"
+  }
 }
