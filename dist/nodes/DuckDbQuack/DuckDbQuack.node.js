@@ -55,7 +55,7 @@ function validateTableName(name, node, itemIndex) {
     if (!trimmed)
         return trimmed;
     if (!VALID_TABLE_NAME.test(trimmed)) {
-        throw new n8n_workflow_1.NodeOperationError(node, `Invalid table name "${trimmed}". Use only letters, digits, underscores, and dots (e.g., employees or main.employees).`, { itemIndex });
+        throw new n8n_workflow_1.NodeOperationError(node, `Invalid identifier "${trimmed}". Use only letters, digits, underscores, and dots (e.g., employees or main.employees).`, { itemIndex });
     }
     return trimmed;
 }
@@ -325,7 +325,7 @@ class DuckDbQuack {
                     default: '',
                     required: true,
                     placeholder: 'id',
-                    description: 'Column used in the WHERE clause. Each input item provides the value.',
+                    description: 'Column name used in the WHERE clause (e.g. "id"). Each input item provides the value to match against this column.',
                 },
                 {
                     displayName: 'Operation',

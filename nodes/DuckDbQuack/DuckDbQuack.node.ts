@@ -47,7 +47,7 @@ function validateTableName(name: string, node: INode, itemIndex: number): string
 	if (!VALID_TABLE_NAME.test(trimmed)) {
 		throw new NodeOperationError(
 			node,
-			`Invalid table name "${trimmed}". Use only letters, digits, underscores, and dots (e.g., employees or main.employees).`,
+			`Invalid identifier "${trimmed}". Use only letters, digits, underscores, and dots (e.g., employees or main.employees).`,
 			{ itemIndex },
 		);
 	}
@@ -349,7 +349,7 @@ export class DuckDbQuack implements INodeType {
 						required: true,
 						placeholder: 'id',
 						description:
-							'Column used in the WHERE clause. Each input item provides the value.',
+									'Column name used in the WHERE clause (e.g. "id"). Each input item provides the value to match against this column.',
 					},
 
 					// ======================== QUERY ========================
