@@ -59,15 +59,6 @@ function validateTableName(name, node, itemIndex) {
     }
     return trimmed;
 }
-function escapeLiteral(val) {
-    if (val === undefined || val === null)
-        return 'NULL';
-    if (typeof val === 'boolean')
-        return val ? 'TRUE' : 'FALSE';
-    if (typeof val === 'number')
-        return String(val);
-    return `'${String(val).replace(/'/g, "''")}'`;
-}
 const CORE_EXTENSIONS = ['httpfs'];
 function parseExtensionSpec(spec) {
     const trimmed = spec.trim();
@@ -295,25 +286,28 @@ class DuckDbQuack {
                     description: 'VARCHAR preserves everything as text. Auto-detect uses DuckDB type inference on VALUES for proper integers, floats, and dates.',
                 },
                 {
-                    displayName: 'Key Column',
-                    name: 'keyColumn',
+                    displayName: 'Filter (WHERE Clause)',
+                    name: 'updateWhereClause',
                     type: 'string',
                     displayOptions: {
                         show: { resource: ['table'], operation: ['update'] },
                     },
                     default: '',
                     required: true,
-                    placeholder: 'id',
-                    description: 'Column used in the WHERE clause to match rows. All other keys from the input item become SET values.',
+                    placeholder: "id=42 OR status='pending'",
+                    description: 'SQL WHERE conditions. Required as a safety guard — empty WHERE = no update.',
                 },
                 {
-                    displayName: 'Update Behavior',
-                    name: 'updateInfo',
-                    type: 'notice',
+                    displayName: 'Set Columns',
+                    name: 'setColumns',
+                    type: 'string',
                     displayOptions: {
                         show: { resource: ['table'], operation: ['update'] },
                     },
-                    default: "Input item keys other than the Key Column are used as SET values.\nExample: { \"id\": 42, \"status\": \"done\" } → UPDATE table SET status='done' WHERE id=42",
+                    default: '',
+                    required: true,
+                    placeholder: "status='done', score=95",
+                    description: 'Comma-separated column=value pairs (e.g. "status=\'done\', score=95"). String values need single quotes.',
                 },
                 {
                     displayName: 'Filter (WHERE Clause)',
@@ -685,59 +679,25 @@ class DuckDbQuack {
                     const table = isRemote
                         ? rawTable
                         : validateTableName(rawTable, this.getNode(), 0);
-                    const keyCol = this.getNodeParameter('keyColumn', 0);
-                    const escapedKeyCol = validateTableName(keyCol, this.getNode(), 0);
-                    if (items.length === 0) {
-                        returnData.push({
-                            json: { rows_updated: 0 },
-                            pairedItem: { item: 0 },
-                        });
+                    const whereClause = this.getNodeParameter('updateWhereClause', 0).trim();
+                    const setColumns = this.getNodeParameter('setColumns', 0).trim();
+                    if (!whereClause) {
+                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'UPDATE requires a WHERE clause. Use SQL Query for unconstrained updates.', { itemIndex: 0 });
+                    }
+                    if (!setColumns) {
+                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'UPDATE requires Set Columns. Provide comma-separated column=value pairs.', { itemIndex: 0 });
+                    }
+                    const sql = `UPDATE ${table} SET ${setColumns} WHERE ${whereClause};`;
+                    if (isRemote) {
+                        await runRemoteDml(credentials, sql);
                     }
                     else {
-                        let updated = 0;
-                        for (let i = 0; i < items.length; i++) {
-                            const row = items[i].json;
-                            const keyVal = row[keyCol];
-                            if (keyVal === undefined || keyVal === null)
-                                continue;
-                            const setCols = Object.keys(row)
-                                .filter((k) => k !== keyCol)
-                                .map((k) => {
-                                const col = validateTableName(k, this.getNode(), i);
-                                return `${col} = ${escapeLiteral(row[k])}`;
-                            })
-                                .join(', ');
-                            if (!setCols)
-                                continue;
-                            const sql = `UPDATE ${table} SET ${setCols} WHERE ${escapedKeyCol} = ${escapeLiteral(keyVal)};`;
-                            try {
-                                if (isRemote) {
-                                    await runRemoteDml(credentials, sql);
-                                }
-                                else {
-                                    await connection.run(sql);
-                                }
-                                updated++;
-                            }
-                            catch (itemError) {
-                                if (this.continueOnFail()) {
-                                    returnData.push({
-                                        json: {
-                                            error: itemError.message,
-                                        },
-                                        error: itemError,
-                                        pairedItem: { item: i },
-                                    });
-                                    continue;
-                                }
-                                throw new n8n_workflow_1.NodeApiError(this.getNode(), itemError, { itemIndex: i });
-                            }
-                        }
-                        returnData.push({
-                            json: { rows_updated: updated },
-                            pairedItem: { item: 0 },
-                        });
+                        await connection.run(sql);
                     }
+                    returnData.push({
+                        json: { rows_updated: 'Updated' },
+                        pairedItem: { item: 0 },
+                    });
                 }
                 else if (op === 'delete') {
                     const rawTable = this.getNodeParameter('tableName', 0);

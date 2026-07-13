@@ -55,16 +55,6 @@ function validateTableName(name: string, node: INode, itemIndex: number): string
 }
 
 // ---------------------------------------------------------------------------
-// Escape a JS value for SQL literal — handles NULL, boolean, number, string.
-// ---------------------------------------------------------------------------
-function escapeLiteral(val: unknown): string {
-	if (val === undefined || val === null) return 'NULL';
-	if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
-	if (typeof val === 'number') return String(val);
-	return `'${String(val).replace(/'/g, "''")}'`;
-}
-
-// ---------------------------------------------------------------------------
 // Extensions that are ALWAYS loaded (core infrastructure).
 // parquet & json are built-in since DuckDB 1.0 — only httpfs is needed.
 // ---------------------------------------------------------------------------
@@ -316,31 +306,34 @@ export class DuckDbQuack implements INodeType {
 					},
 
 					{
-						displayName: 'Key Column',
-						name: 'keyColumn',
+						displayName: 'Filter (WHERE Clause)',
+						name: 'updateWhereClause',
 						type: 'string',
 						displayOptions: {
 							show: { resource: ['table'], operation: ['update'] },
 						},
 						default: '',
 						required: true,
-						placeholder: 'id',
+						placeholder: "id=42 OR status='pending'",
 						description:
-							'Column used in the WHERE clause to match rows. All other keys from the input item become SET values.',
+							'SQL WHERE conditions. Required as a safety guard — empty WHERE = no update.',
 					},
 					{
-						displayName: 'Update Behavior',
-						name: 'updateInfo',
-						type: 'notice',
+						displayName: 'Set Columns',
+						name: 'setColumns',
+						type: 'string',
 						displayOptions: {
 							show: { resource: ['table'], operation: ['update'] },
 						},
-						default:
-							"Input item keys other than the Key Column are used as SET values.\nExample: { \"id\": 42, \"status\": \"done\" } → UPDATE table SET status='done' WHERE id=42",
+						default: '',
+						required: true,
+						placeholder: "status='done', score=95",
+						description:
+							'Comma-separated column=value pairs (e.g. "status=\'done\', score=95"). String values need single quotes.',
 					},
 					{
-						displayName: 'Filter (WHERE Clause)',
-						name: 'whereClause',
+							displayName: 'Filter (WHERE Clause)',
+							name: 'whereClause',
 						type: 'string',
 						displayOptions: { show: { resource: ['table'], operation: ['delete'] } },
 						default: '',
@@ -763,63 +756,35 @@ export class DuckDbQuack implements INodeType {
 							const table = isRemote
 								? rawTable
 								: validateTableName(rawTable, this.getNode(), 0);
-							const keyCol = this.getNodeParameter('keyColumn', 0) as string;
-							const escapedKeyCol = validateTableName(keyCol, this.getNode(), 0);
+							const whereClause = (this.getNodeParameter('updateWhereClause', 0) as string).trim();
+							const setColumns = (this.getNodeParameter('setColumns', 0) as string).trim();
 
-							if (items.length === 0) {
-								returnData.push({
-									json: { rows_updated: 0 } as unknown as IDataObject,
-									pairedItem: { item: 0 },
-								});
-							} else {
-								let updated = 0;
-								for (let i = 0; i < items.length; i++) {
-									const row = items[i].json;
-									const keyVal = row[keyCol];
-									if (keyVal === undefined || keyVal === null) continue;
-
-									const setCols = Object.keys(row)
-										.filter((k) => k !== keyCol)
-										.map((k) => {
-											const col = validateTableName(k, this.getNode(), i);
-											return `${col} = ${escapeLiteral(row[k])}`;
-										})
-										.join(', ');
-
-									if (!setCols) continue;
-
-									const sql = `UPDATE ${table} SET ${setCols} WHERE ${escapedKeyCol} = ${escapeLiteral(keyVal)};`;
-									try {
-										if (isRemote) {
-											await runRemoteDml(credentials, sql);
-										} else {
-											await connection.run(sql);
-										}
-										updated++;
-									} catch (itemError) {
-										if (this.continueOnFail()) {
-											returnData.push({
-												json: {
-													error: (itemError as Error).message,
-												} as unknown as IDataObject,
-												error: itemError as NodeOperationError,
-												pairedItem: { item: i },
-											});
-											continue;
-										}
-										throw new NodeApiError(
-											this.getNode(),
-											itemError as unknown as JsonObject,
-											{ itemIndex: i },
-										);
-									}
-								}
-								returnData.push({
-									json: { rows_updated: updated } as unknown as IDataObject,
-									pairedItem: { item: 0 },
-								});
+							if (!whereClause) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'UPDATE requires a WHERE clause. Use SQL Query for unconstrained updates.',
+									{ itemIndex: 0 },
+								);
 							}
-				} else if (op === 'delete') {
+							if (!setColumns) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'UPDATE requires Set Columns. Provide comma-separated column=value pairs.',
+									{ itemIndex: 0 },
+								);
+							}
+
+							const sql = `UPDATE ${table} SET ${setColumns} WHERE ${whereClause};`;
+							if (isRemote) {
+								await runRemoteDml(credentials, sql);
+							} else {
+								await connection.run(sql);
+							}
+							returnData.push({
+								json: { rows_updated: 'Updated' } as unknown as IDataObject,
+								pairedItem: { item: 0 },
+								});
+								} else if (op === 'delete') {
 							const rawTable = this.getNodeParameter('tableName', 0) as string;
 							const table = isRemote
 								? rawTable
@@ -852,11 +817,11 @@ export class DuckDbQuack implements INodeType {
 								json: { rows_deleted: deleted } as unknown as IDataObject,
 								pairedItem: { item: 0 },
 							});
-						}
-			}
+							}
+							}
 
-			// ========================== QUERY ==========================
-			else if (resource === 'query') {
+							// ========================== QUERY ==========================
+							else if (resource === 'query') {
 				const op = this.getNodeParameter('operation', 0) as string;
 
 				if (op === 'persist') {
