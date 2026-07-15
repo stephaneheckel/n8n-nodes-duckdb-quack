@@ -22,8 +22,14 @@ import * as path from "path";
 // create separate instances (typically 1-3 in a real workflow).
 // No eviction needed; adding it would break loadOptions dropdowns that share
 // this cache and can't coordinate with the editor lifecycle.
+//
+// Uses a Promise cache to avoid TOCTOU races: concurrent callers for the
+// same key share the in-flight DuckDBInstance.create() promise instead of
+// racing to open the same file (which would fail on Windows due to exclusive
+// file locking).
 // ---------------------------------------------------------------------------
 const instanceCache = new Map<string, DuckDBInstance>();
+const instancePromises = new Map<string, Promise<DuckDBInstance>>();
 
 async function getOrCreateInstance(
   key: string,
@@ -31,10 +37,18 @@ async function getOrCreateInstance(
 ): Promise<DuckDBInstance> {
   const entry = instanceCache.get(key);
   if (entry) return entry;
+
+  const inFlight = instancePromises.get(key);
+  if (inFlight) return inFlight;
+
   const dbPath = path.startsWith("quack_") ? ":memory:" : path;
-  const inst = await DuckDBInstance.create(dbPath);
-  instanceCache.set(key, inst);
-  return inst;
+  const promise = DuckDBInstance.create(dbPath).then((inst) => {
+    instanceCache.set(key, inst);
+    instancePromises.delete(key);
+    return inst;
+  });
+  instancePromises.set(key, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +189,7 @@ export class DuckDbQuack implements INodeType {
         noDataExpression: true,
         options: [
           { name: "Query / Administration", value: "query" },
+          { name: "Server", value: "server" },
           { name: "Table", value: "table" },
         ],
         default: "table",
@@ -191,25 +206,25 @@ export class DuckDbQuack implements INodeType {
           {
             name: "List Columns",
             value: "listColumns",
-            action: "List columns a table",
+            action: "List columns of a table",
             description: "Inspect structural properties and column definitions",
           },
           {
             name: "List Tables",
             value: "listTables",
-            action: "List tables a table",
+            action: "List tables in a database",
             description: "Fetch all tables visible in the current catalog",
           },
           {
             name: "Read Table",
             value: "read",
-            action: "Read table a table",
+            action: "Read rows from a table",
             description: "Stream records from an active table",
           },
           {
             name: "Write / Append Rows",
             value: "write",
-            action: "Write append rows a table",
+            action: "Write/append rows to a table",
             description: "Insert or map incoming data rows into a table",
           },
           {
@@ -227,6 +242,30 @@ export class DuckDbQuack implements INodeType {
           },
         ],
         default: "read",
+      },
+
+      // ======================== SERVER ========================
+      {
+        displayName: "Operation",
+        name: "operation",
+        type: "options",
+        displayOptions: { show: { resource: ["server"] } },
+        noDataExpression: true,
+        options: [
+          {
+            name: "Get Server Info",
+            value: "serverInfo",
+            action: "Get server info",
+            description: "Retrieve version, uptime, and configuration from a Quack server",
+          },
+          {
+            name: "List Sessions",
+            value: "listSessions",
+            action: "List server sessions",
+            description: "Retrieve active connections with IDs, queries, and states",
+          },
+        ],
+        default: "serverInfo",
       },
       {
         displayName: "Table Name or ID",
@@ -286,9 +325,41 @@ export class DuckDbQuack implements INodeType {
         displayOptions: { show: { resource: ["table"], operation: ["read"] } },
         options: [
           { name: "Parquet File (Binary)", value: "parquet" },
+          { name: "CSV File", value: "csv" },
           { name: "Standard JSON Array", value: "json" },
         ],
         default: "json",
+      },
+      {
+        displayName: "File Path",
+        name: "filePath",
+        type: "string",
+        displayOptions: {
+          show: {
+            resource: ["table"],
+            operation: ["read"],
+            outputFormat: ["parquet", "csv"],
+          },
+        },
+        default: "",
+        required: false,
+        placeholder: "/data/export.parquet",
+        description:
+          "Absolute path to write the output file. When set, data is streamed directly to disk. Leave empty to return the file as binary data (Parquet) or inline rows (JSON). Required for CSV.",
+      },
+      {
+        displayName: "Include Header Row",
+        name: "csvHeader",
+        type: "boolean",
+        displayOptions: {
+          show: {
+            resource: ["table"],
+            operation: ["read"],
+            outputFormat: ["csv"],
+          },
+        },
+        default: true,
+        description: "Whether to write column names as the first row of the CSV file",
       },
       {
         displayName: "Write Mode",
@@ -378,20 +449,20 @@ export class DuckDbQuack implements INodeType {
           {
             name: "Persist Memory to Disk",
             value: "persist",
-            action: "Persist memory to disk a query",
+            action: "Persist memory to disk",
             description:
               "Snapshot transient :memory: state to a file-backed database",
           },
           {
             name: "Select (Custom SQL)",
             value: "select",
-            action: "Select custom sql a query",
+            action: "Execute custom SQL query",
             description: "Execute raw multi-line SQL queries",
           },
           {
             name: "Stateless Quack Query",
             value: "stateless",
-            action: "Stateless quack query a query",
+            action: "Stateless Quack query",
             description:
               "Single round-trip query bypassing ATTACH (remote only)",
           },
@@ -418,9 +489,41 @@ export class DuckDbQuack implements INodeType {
         },
         options: [
           { name: "Parquet File (Binary)", value: "parquet" },
+          { name: "CSV File", value: "csv" },
           { name: "Standard JSON Array", value: "json" },
         ],
         default: "json",
+      },
+      {
+        displayName: "File Path",
+        name: "queryFilePath",
+        type: "string",
+        displayOptions: {
+          show: {
+            resource: ["query"],
+            operation: ["select"],
+            queryOutputFormat: ["parquet", "csv"],
+          },
+        },
+        default: "",
+        required: false,
+        placeholder: "/data/export.parquet",
+        description:
+          "Absolute path to write the output file. When set, data is streamed directly to disk. Leave empty to return the file as binary data (Parquet) or inline rows (JSON). Required for CSV.",
+      },
+      {
+        displayName: "Include Header Row",
+        name: "queryCsvHeader",
+        type: "boolean",
+        displayOptions: {
+          show: {
+            resource: ["query"],
+            operation: ["select"],
+            queryOutputFormat: ["csv"],
+          },
+        },
+        default: true,
+        description: "Whether to write column names as the first row of the CSV file",
       },
       {
         displayName: "Target Disk Path",
@@ -511,7 +614,7 @@ export class DuckDbQuack implements INodeType {
         isRemote &&
         (resource === "query" ||
           (resource === "table" &&
-            ["write", "update", "delete"].includes(
+            ["write", "update", "delete", "read"].includes(
               this.getNodeParameter("operation", 0) as string,
             )));
 
@@ -570,6 +673,22 @@ export class DuckDbQuack implements INodeType {
             /* already gone */
           }
         }
+      };
+
+      // Helper: stream query results directly to a file on disk (no binary pipeline)
+      const exportToFile = async (
+        sql: string,
+        destPath: string,
+        format: string,
+        csvHeader: boolean,
+      ) => {
+        const formatClause =
+          format === "parquet"
+            ? "PARQUET"
+            : `CSV, HEADER ${csvHeader}`;
+        await connection.run(
+          `COPY (${sql}) TO '${destPath.replace(/'/g, "''")}' (FORMAT ${formatClause});`,
+        );
       };
 
       // Helper: run a query or DML via stateless quack_query (avoids ATTACH streaming conflicts)
@@ -640,15 +759,51 @@ export class DuckDbQuack implements INodeType {
             sql += ` LIMIT ${Number(limit)}`;
           }
 
-          if (format === "parquet") {
-            const binaryData = await exportParquet(sql, `${table}.parquet`);
-            returnData.push({
-              json: {
-                rowCount: "Streamed to Parquet file",
-              } as unknown as IDataObject,
-              binary: { data: binaryData },
-              pairedItem: { item: 0 },
-            });
+          if (format === "parquet" || format === "csv") {
+            const filePath = this.getNodeParameter("filePath", 0, "") as string;
+            if (filePath && filePath.trim()) {
+              // Stream directly to disk — no memory overhead
+              const csvHeader =
+                format === "csv"
+                  ? (this.getNodeParameter("csvHeader", 0) as boolean)
+                  : false;
+              // Count rows before export via ATTACH (single query, works local + remote)
+              const countRows = (
+                await connection.runAndReadAll(
+                  `SELECT COUNT(*) AS cnt FROM (${sql}) AS _sub;`,
+                )
+              ).getRowObjectsJson();
+              const rows = Number(
+                (countRows[0] as Record<string, unknown> | undefined)
+                  ?.cnt ?? 0,
+              );
+
+              await exportToFile(sql, filePath.trim(), format, csvHeader);
+              returnData.push({
+                json: {
+                  exported: true,
+                  path: filePath.trim(),
+                  rows,
+                } as unknown as IDataObject,
+                pairedItem: { item: 0 },
+              });
+            } else if (format === "csv") {
+              throw new NodeOperationError(
+                this.getNode(),
+                "CSV output requires a File Path.",
+                { itemIndex: 0 },
+              );
+            } else {
+              // Parquet without file path: existing binary pipeline
+              const binaryData = await exportParquet(sql, `${table}.parquet`);
+              returnData.push({
+                json: {
+                  rowCount: "Streamed to Parquet file",
+                } as unknown as IDataObject,
+                binary: { data: binaryData },
+                pairedItem: { item: 0 },
+              });
+            }
           } else {
             const rows = isRemote
               ? await runRemoteQuery(credentials, sql)
@@ -927,6 +1082,8 @@ export class DuckDbQuack implements INodeType {
             copied++;
           }
           await connection.run(`DETACH disk_db;`);
+          // Evict stale cache entry so next access gets fresh data and releases file lock
+          instanceCache.delete(dest);
           returnData.push({
             json: {
               success: true,
@@ -941,15 +1098,39 @@ export class DuckDbQuack implements INodeType {
             0,
           ) as string;
 
-          if (format === "parquet") {
-            const binaryData = await exportParquet(sql, "query_output.parquet");
-            returnData.push({
-              json: {
-                rowCount: "Query output saved to Parquet format",
-              } as unknown as IDataObject,
-              binary: { data: binaryData },
-              pairedItem: { item: 0 },
-            });
+          if (format === "parquet" || format === "csv") {
+            const queryFilePath = this.getNodeParameter("queryFilePath", 0, "") as string;
+            if (queryFilePath && queryFilePath.trim()) {
+              // Stream directly to disk — no memory overhead
+              const csvHeader =
+                format === "csv"
+                  ? (this.getNodeParameter("queryCsvHeader", 0) as boolean)
+                  : false;
+              await exportToFile(sql, queryFilePath.trim(), format, csvHeader);
+              returnData.push({
+                json: {
+                  exported: true,
+                  path: queryFilePath.trim(),
+                } as unknown as IDataObject,
+                pairedItem: { item: 0 },
+              });
+            } else if (format === "csv") {
+              throw new NodeOperationError(
+                this.getNode(),
+                "CSV output requires a File Path.",
+                { itemIndex: 0 },
+              );
+            } else {
+              // Parquet without file path: existing binary pipeline
+              const binaryData = await exportParquet(sql, "query_output.parquet");
+              returnData.push({
+                json: {
+                  rowCount: "Query output saved to Parquet format",
+                } as unknown as IDataObject,
+                binary: { data: binaryData },
+                pairedItem: { item: 0 },
+              });
+            }
           } else {
             // Split multi-statement SQL: run DDL/PRAGMA/etc with run(),
             // only the last statement produces output
@@ -1002,6 +1183,52 @@ export class DuckDbQuack implements INodeType {
             `FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`,
           );
           const rows = result.getRowObjectsJson();
+          for (const row of rows) {
+            returnData.push({
+              json: row as unknown as IDataObject,
+              pairedItem: { item: 0 },
+            });
+          }
+        }
+      }
+
+      // ========================== SERVER ==========================
+      else if (resource === "server") {
+        if (!isRemote) {
+          throw new NodeOperationError(
+            this.getNode(),
+            'Server operations require Connection Mode to be "Remote".',
+            { itemIndex: 0 },
+          );
+        }
+
+        const op = this.getNodeParameter("operation", 0) as string;
+
+        if (op === "serverInfo") {
+          const rows = await runRemoteQuery(
+            credentials,
+            "SELECT * FROM whoami();",
+          );
+          for (const row of rows) {
+            // Parse JSON metadata field if present
+            const output: Record<string, unknown> = { ...row };
+            if (typeof output.meta === "string") {
+              try {
+                output.meta = JSON.parse(output.meta as string);
+              } catch (_e) {
+                /* keep as raw string if invalid JSON */
+              }
+            }
+            returnData.push({
+              json: output as unknown as IDataObject,
+              pairedItem: { item: 0 },
+            });
+          }
+        } else if (op === "listSessions") {
+          const rows = await runRemoteQuery(
+            credentials,
+            "SELECT * FROM quack_active_connections() WHERE state = 'active';",
+          );
           for (const row of rows) {
             returnData.push({
               json: row as unknown as IDataObject,

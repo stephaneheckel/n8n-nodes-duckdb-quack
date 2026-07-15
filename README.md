@@ -69,6 +69,13 @@ Remote write operations use batch SQL INSERT to avoid appender chunk limits over
 | Stateless Quack Query | Single round-trip query bypassing ATTACH | — | ✅ |
 | Persist Memory to Disk | Save in-memory database to a `.db` file | ✅ | — |
 
+### Server Resource
+
+| Operation | Description | Local | Remote |
+|-----------|-------------|-------|--------|
+| Get Server Info | Retrieve version, uptime, and configuration | — | ✅ |
+| List Sessions | Active sessions with IDs and connected databases | — | ✅ |
+
 ## Usage Examples
 
 ### Local In-Memory

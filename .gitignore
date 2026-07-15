@@ -1,6 +1,6 @@
 node_modules/
-dist/tsconfig.tsbuildinfo
-dist/package.json
+dist/
+!dist/package.json
 package-lock.json
-start_quack_server.js
+scripts/start_quack_server.js
 .hermes/
