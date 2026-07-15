@@ -1,19 +1,19 @@
 import {
-	IExecuteFunctions,
-	INodeExecutionData,
-	INodeType,
-	INodeTypeDescription,
-	ILoadOptionsFunctions,
-	INodePropertyOptions,
-	NodeApiError,
-	NodeConnectionTypes,
-	NodeOperationError,
-} from 'n8n-workflow';
-import type { INode, Icon, IDataObject, JsonObject } from 'n8n-workflow';
-import { DuckDBInstance } from '@duckdb/node-api';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+  IExecuteFunctions,
+  INodeExecutionData,
+  INodeType,
+  INodeTypeDescription,
+  ILoadOptionsFunctions,
+  INodePropertyOptions,
+  NodeApiError,
+  NodeConnectionTypes,
+  NodeOperationError,
+} from "n8n-workflow";
+import type { INode, Icon, IDataObject, JsonObject } from "n8n-workflow";
+import { DuckDBInstance } from "@duckdb/node-api";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 
 // ---------------------------------------------------------------------------
 // Instance cache: lives for the process lifetime (n8n's runtime).
@@ -25,13 +25,16 @@ import * as path from 'path';
 // ---------------------------------------------------------------------------
 const instanceCache = new Map<string, DuckDBInstance>();
 
-async function getOrCreateInstance(key: string, path: string): Promise<DuckDBInstance> {
-	const entry = instanceCache.get(key);
-	if (entry) return entry;
-	const dbPath = path.startsWith('quack_') ? ':memory:' : path;
-	const inst = await DuckDBInstance.create(dbPath);
-	instanceCache.set(key, inst);
-	return inst;
+async function getOrCreateInstance(
+  key: string,
+  path: string,
+): Promise<DuckDBInstance> {
+  const entry = instanceCache.get(key);
+  if (entry) return entry;
+  const dbPath = path.startsWith("quack_") ? ":memory:" : path;
+  const inst = await DuckDBInstance.create(dbPath);
+  instanceCache.set(key, inst);
+  return inst;
 }
 
 // ---------------------------------------------------------------------------
@@ -41,31 +44,35 @@ async function getOrCreateInstance(key: string, path: string): Promise<DuckDBIns
 // ---------------------------------------------------------------------------
 const VALID_TABLE_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$/;
 
-function validateTableName(name: string, node: INode, itemIndex: number): string {
-	const trimmed = name.trim();
-	if (!trimmed) return trimmed;
-	if (!VALID_TABLE_NAME.test(trimmed)) {
-		throw new NodeOperationError(
-			node,
-			`Invalid identifier "${trimmed}". Use only letters, digits, underscores, and dots (e.g., employees or main.employees).`,
-			{ itemIndex },
-		);
-	}
-	return trimmed;
+function validateTableName(
+  name: string,
+  node: INode,
+  itemIndex: number,
+): string {
+  const trimmed = name.trim();
+  if (!trimmed) return trimmed;
+  if (!VALID_TABLE_NAME.test(trimmed)) {
+    throw new NodeOperationError(
+      node,
+      `Invalid identifier "${trimmed}". Use only letters, digits, underscores, and dots (e.g., employees or main.employees).`,
+      { itemIndex },
+    );
+  }
+  return trimmed;
 }
 
 // ---------------------------------------------------------------------------
 // Extensions that are ALWAYS loaded (core infrastructure).
 // parquet & json are built-in since DuckDB 1.0 — only httpfs is needed.
 // ---------------------------------------------------------------------------
-const CORE_EXTENSIONS = ['httpfs'];
+const CORE_EXTENSIONS = ["httpfs"];
 
 // Parse an extension spec like "gsheets FROM community" into { name, installClause }
 function parseExtensionSpec(spec: string): { name: string; install: string } {
-	const trimmed = spec.trim();
-	const parts = trimmed.split(/\s+/);
-	const name = parts[0];
-	return { name, install: trimmed };
+  const trimmed = spec.trim();
+  const parts = trimmed.split(/\s+/);
+  const name = parts[0];
+  return { name, install: trimmed };
 }
 
 // Track which credential instances have had extensions loaded
@@ -75,905 +82,962 @@ const loadedInstances = new Set<string>();
 // Node
 // ---------------------------------------------------------------------------
 export class DuckDbQuack implements INodeType {
-	// Serialize loadOptions calls to avoid concurrent Quack connections
-	private static _loadLock: Promise<void> = Promise.resolve();
+  // Serialize loadOptions calls to avoid concurrent Quack connections
+  private static _loadLock: Promise<void> = Promise.resolve();
 
-	methods = {
-		loadOptions: {
-			async getTables(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const run = async () => {
-					const credentials = await this.getCredentials('duckDbQuackApi');
-					const instancePath = credentials.connectionType === 'local'
-						? ((credentials.filePath as string) || ':memory:')
-						: `quack_${credentials.host || 'localhost'}`;
-					const cacheKey = instancePath;
-					const instance = await getOrCreateInstance(cacheKey, instancePath);
-					const connection = await instance.connect();
-					try {
-						if (credentials.connectionType === 'remote') {
-							const host = (credentials.host as string) || 'quack:localhost:9494';
-							const token = credentials.token as string;
-							const disableSsl = credentials.disableSsl as boolean;
-							const tokenArg = token
-								? `, token := '${token.replace(/'/g, "''")}'`
-								: '';
-							const sslArg = disableSsl ? ', disable_ssl := true' : '';
-							const result = await connection.runAndReadAll(
-								`FROM quack_query('${host.replace(/'/g, "''")}', 'SHOW ALL TABLES'${tokenArg}${sslArg});`,
-							);
-							const rows = result.getRowObjectsJson();
-							return rows.map((row: Record<string, unknown>) => ({
-								name: `[${row.schema}] ${row.name}${row.temporary ? ' (Temp)' : ''}`,
-								value: `${row.schema}.${row.name}`,
-							}));
-						}
-						// Local: tables live in default database — no ATTACH needed
-						const result = await connection.runAndReadAll('SHOW ALL TABLES;');
-						const rows = result.getRowObjectsJson();
-						return rows.map((row: Record<string, unknown>) => ({
-							name: `[${row.schema}] ${row.name}${row.temporary ? ' (Temp)' : ''}`,
-							value: `${row.schema}.${row.name}`,
-						}));
-					} catch (error) {
-						return [
-							{
-								name: `Error fetching metadata: ${(error as Error).message}`,
-								value: 'error',
-							},
-						];
-					} finally {
-						connection.closeSync();
-					}
-				};
-				// Serialize: ensure only one loadOptions call runs at a time
-				const prev = DuckDbQuack._loadLock;
-				let release!: () => void;
-				DuckDbQuack._loadLock = new Promise<void>((r) => {
-					release = r;
-				});
-				await prev;
-				try {
-					return await run();
-				} finally {
-					release();
-				}
-			},
-		},
-	};
+  methods = {
+    loadOptions: {
+      async getTables(
+        this: ILoadOptionsFunctions,
+      ): Promise<INodePropertyOptions[]> {
+        const run = async () => {
+          const credentials = await this.getCredentials("duckDbQuackApi");
+          const instancePath =
+            credentials.connectionType === "local"
+              ? (credentials.filePath as string) || ":memory:"
+              : `quack_${credentials.host || "localhost"}`;
+          const cacheKey = instancePath;
+          const instance = await getOrCreateInstance(cacheKey, instancePath);
+          const connection = await instance.connect();
+          try {
+            if (credentials.connectionType === "remote") {
+              const host =
+                (credentials.host as string) || "quack:localhost:9494";
+              const token = credentials.token as string;
+              const disableSsl = credentials.disableSsl as boolean;
+              const tokenArg = token
+                ? `, token := '${token.replace(/'/g, "''")}'`
+                : "";
+              const sslArg = disableSsl ? ", disable_ssl := true" : "";
+              const result = await connection.runAndReadAll(
+                `FROM quack_query('${host.replace(/'/g, "''")}', 'SHOW ALL TABLES'${tokenArg}${sslArg});`,
+              );
+              const rows = result.getRowObjectsJson();
+              return rows.map((row: Record<string, unknown>) => ({
+                name: `[${row.schema}] ${row.name}${row.temporary ? " (Temp)" : ""}`,
+                value: `${row.schema}.${row.name}`,
+              }));
+            }
+            // Local: tables live in default database — no ATTACH needed
+            const result = await connection.runAndReadAll("SHOW ALL TABLES;");
+            const rows = result.getRowObjectsJson();
+            return rows.map((row: Record<string, unknown>) => ({
+              name: `[${row.schema}] ${row.name}${row.temporary ? " (Temp)" : ""}`,
+              value: `${row.schema}.${row.name}`,
+            }));
+          } catch (error) {
+            return [
+              {
+                name: `Error fetching metadata: ${(error as Error).message}`,
+                value: "error",
+              },
+            ];
+          } finally {
+            connection.closeSync();
+          }
+        };
+        // Serialize: ensure only one loadOptions call runs at a time
+        const prev = DuckDbQuack._loadLock;
+        let release!: () => void;
+        DuckDbQuack._loadLock = new Promise<void>((r) => {
+          release = r;
+        });
+        await prev;
+        try {
+          return await run();
+        } finally {
+          release();
+        }
+      },
+    },
+  };
 
-	description: INodeTypeDescription = {
-		displayName: 'DuckDB Client',
-		name: 'duckDbQuack',
-		icon: { light: 'file:duckdb.svg', dark: 'file:duckdb.svg' } as Icon,
-		group: ['transform'],
-		version: 1,
-		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
-		description:
-			'Open, Read, Write, and Query data using local DuckDB files or high-speed Quack remote endpoints',
-		defaults: { name: 'DuckDB Engine' },
-		inputs: [NodeConnectionTypes.Main],
-		outputs: [NodeConnectionTypes.Main],
-		usableAsTool: true,
-		credentials: [{ name: 'duckDbQuackApi', required: true }],
-		properties: [
-			// --- RESOURCE ---
-			{
-				displayName: 'Resource',
-				name: 'resource',
-				type: 'options',
-				noDataExpression: true,
-				options: [
-					{ name: 'Query / Administration', value: 'query' },
-					{ name: 'Table', value: 'table' },
-				],
-				default: 'table',
-			},
+  description: INodeTypeDescription = {
+    displayName: "DuckDB Client",
+    name: "duckDbQuack",
+    icon: { light: "file:duckdb.svg", dark: "file:duckdb.svg" } as Icon,
+    group: ["transform"],
+    version: 1,
+    subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
+    description:
+      "Open, Read, Write, and Query data using local DuckDB files or high-speed Quack remote endpoints",
+    defaults: { name: "DuckDB Engine" },
+    inputs: [NodeConnectionTypes.Main],
+    outputs: [NodeConnectionTypes.Main],
+    usableAsTool: true,
+    credentials: [{ name: "duckDbQuackApi", required: true }],
+    properties: [
+      // --- RESOURCE ---
+      {
+        displayName: "Resource",
+        name: "resource",
+        type: "options",
+        noDataExpression: true,
+        options: [
+          { name: "Query / Administration", value: "query" },
+          { name: "Table", value: "table" },
+        ],
+        default: "table",
+      },
 
-			// ======================== TABLE ========================
-			{
-				displayName: 'Operation',
-				name: 'operation',
-				type: 'options',
-				displayOptions: { show: { resource: ['table'] } },
-				noDataExpression: true,
-				options: [
-					{
-						name: 'List Columns',
-						value: 'listColumns',
-						action: 'List columns a table',
-						description: 'Inspect structural properties and column definitions',
-					},
-					{
-						name: 'List Tables',
-						value: 'listTables',
-						action: 'List tables a table',
-						description: 'Fetch all tables visible in the current catalog',
-					},
-					{
-						name: 'Read Table',
-						value: 'read',
-						action: 'Read table a table',
-						description: 'Stream records from an active table',
-					},
-					{
-							name: 'Write / Append Rows',
-							value: 'write',
-							action: 'Write append rows a table',
-							description: 'Insert or map incoming data rows into a table',
-						},
-						{
-							name: 'Update Rows',
-							value: 'update',
-							action: 'Update rows in a table',
-							description: 'Modify existing records matched by a key column',
-						},
-						{
-							name: 'Delete Rows',
-							value: 'delete',
-							action: 'Delete rows from a table',
-							description: 'Remove records matched by a WHERE condition',
-						},
-					],
-				default: 'read',
-			},
-			{
-				displayName: 'Table Name or ID',
-				name: 'tableName',
-				type: 'options',
-				typeOptions: { loadOptionsMethod: 'getTables' },
-				displayOptions: {
-						show: { resource: ['table'], operation: ['listColumns', 'read', 'update', 'delete'] },
-					},
-				default: '',
-				required: true,
-				description:
-					'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
-			},
-			{
-				displayName: 'Table Name',
-				name: 'tableName',
-				type: 'string',
-				displayOptions: {
-						show: { resource: ['table'], operation: ['write'] },
-					},
-				default: '',
-				required: true,
-				placeholder: 'my_table',
-				description:
-					'Name of the table to write to (e.g., employees). For in-memory databases, use just the table name. The table is auto-created if missing.',
-			},
-			{
-				displayName: 'Filter (WHERE Clause)',
-				name: 'whereClause',
-				type: 'string',
-				displayOptions: { show: { resource: ['table'], operation: ['read'] } },
-				default: '',
-				required: false,
-				placeholder: "score > 80 AND name LIKE 'A%'",
-				description:
-					'SQL WHERE conditions applied at the database level before data reaches n8n',
-			},
-			{
-				displayName: 'Limit',
-				name: 'limit',
-				type: 'number',
-				displayOptions: { show: { resource: ['table'], operation: ['read'] } },
-				default: '',
-				required: false,
-				placeholder: '100',
-				description: 'Maximum number of rows to return. Leave empty for all records.',
-			},
-			{
-				displayName: 'Output Format',
-				name: 'outputFormat',
-				type: 'options',
-				displayOptions: { show: { resource: ['table'], operation: ['read'] } },
-				options: [
-					{ name: 'Parquet File (Binary)', value: 'parquet' },
-					{ name: 'Standard JSON Array', value: 'json' },
-				],
-				default: 'json',
-			},
-			{
-				displayName: 'Write Mode',
-				name: 'writeMode',
-				type: 'options',
-				displayOptions: { show: { resource: ['table'], operation: ['write'] } },
-				options: [
-					{ name: 'Append Rows', value: 'append' },
-					{ name: 'Overwrite / Recreate', value: 'overwrite' },
-				],
-				default: 'append',
-			},
-			{
-				displayName: 'Column Types',
-					name: 'columnTypes',
-					type: 'options',
-					displayOptions: { show: { resource: ['table'], operation: ['write'], writeMode: ['overwrite'] } },
-					options: [
-							{
-								name: 'VARCHAR (Safe — all types preserved as text)',
-								value: 'varchar',
-							},
-							{
-								name: 'Auto-Detect (Infer INT, DOUBLE, DATE from data)',
-								value: 'auto',
-							},
-						],
-						default: 'varchar',
-						description:
-							'VARCHAR preserves everything as text. Auto-detect uses DuckDB type inference on VALUES for proper integers, floats, and dates.',
-					},
+      // ======================== TABLE ========================
+      {
+        displayName: "Operation",
+        name: "operation",
+        type: "options",
+        displayOptions: { show: { resource: ["table"] } },
+        noDataExpression: true,
+        options: [
+          {
+            name: "List Columns",
+            value: "listColumns",
+            action: "List columns a table",
+            description: "Inspect structural properties and column definitions",
+          },
+          {
+            name: "List Tables",
+            value: "listTables",
+            action: "List tables a table",
+            description: "Fetch all tables visible in the current catalog",
+          },
+          {
+            name: "Read Table",
+            value: "read",
+            action: "Read table a table",
+            description: "Stream records from an active table",
+          },
+          {
+            name: "Write / Append Rows",
+            value: "write",
+            action: "Write append rows a table",
+            description: "Insert or map incoming data rows into a table",
+          },
+          {
+            name: "Update Rows",
+            value: "update",
+            action: "Update rows in a table",
+            description:
+              "Modify records using SQL WHERE clause and SET column-value pairs",
+          },
+          {
+            name: "Delete Rows",
+            value: "delete",
+            action: "Delete rows from a table",
+            description: "Remove records matched by a WHERE condition",
+          },
+        ],
+        default: "read",
+      },
+      {
+        displayName: "Table Name or ID",
+        name: "tableName",
+        type: "options",
+        typeOptions: { loadOptionsMethod: "getTables" },
+        displayOptions: {
+          show: {
+            resource: ["table"],
+            operation: ["listColumns", "read", "update", "delete"],
+          },
+        },
+        default: "",
+        required: true,
+        description:
+          'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
+      },
+      {
+        displayName: "Table Name",
+        name: "tableName",
+        type: "string",
+        displayOptions: {
+          show: { resource: ["table"], operation: ["write"] },
+        },
+        default: "",
+        required: true,
+        placeholder: "my_table",
+        description:
+          "Name of the table to write to (e.g., employees). For in-memory databases, use just the table name. The table is auto-created if missing.",
+      },
+      {
+        displayName: "Filter (WHERE Clause)",
+        name: "whereClause",
+        type: "string",
+        displayOptions: { show: { resource: ["table"], operation: ["read"] } },
+        default: "",
+        required: false,
+        placeholder: "score > 80 AND name LIKE 'A%'",
+        description:
+          "SQL WHERE conditions applied at the database level before data reaches n8n",
+      },
+      {
+        displayName: "Limit",
+        name: "limit",
+        type: "number",
+        displayOptions: { show: { resource: ["table"], operation: ["read"] } },
+        default: "",
+        required: false,
+        placeholder: "100",
+        description:
+          "Maximum number of rows to return. Leave empty for all records.",
+      },
+      {
+        displayName: "Output Format",
+        name: "outputFormat",
+        type: "options",
+        displayOptions: { show: { resource: ["table"], operation: ["read"] } },
+        options: [
+          { name: "Parquet File (Binary)", value: "parquet" },
+          { name: "Standard JSON Array", value: "json" },
+        ],
+        default: "json",
+      },
+      {
+        displayName: "Write Mode",
+        name: "writeMode",
+        type: "options",
+        displayOptions: { show: { resource: ["table"], operation: ["write"] } },
+        options: [
+          { name: "Append Rows", value: "append" },
+          { name: "Overwrite / Recreate", value: "overwrite" },
+        ],
+        default: "append",
+      },
+      {
+        displayName: "Column Types",
+        name: "columnTypes",
+        type: "options",
+        displayOptions: {
+          show: {
+            resource: ["table"],
+            operation: ["write"],
+            writeMode: ["overwrite"],
+          },
+        },
+        options: [
+          {
+            name: "VARCHAR (Safe — all types preserved as text)",
+            value: "varchar",
+          },
+          {
+            name: "Auto-Detect (Infer INT, DOUBLE, DATE from data)",
+            value: "auto",
+          },
+        ],
+        default: "varchar",
+        description:
+          "VARCHAR preserves everything as text. Auto-detect uses DuckDB type inference on VALUES for proper integers, floats, and dates.",
+      },
 
-					{
-						displayName: 'Filter (WHERE Clause)',
-						name: 'updateWhereClause',
-						type: 'string',
-						displayOptions: {
-							show: { resource: ['table'], operation: ['update'] },
-						},
-						default: '',
-						required: true,
-						placeholder: "id=42 OR status='pending'",
-						description:
-							'SQL WHERE conditions. Required as a safety guard — empty WHERE = no update.',
-					},
-					{
-						displayName: 'Set Columns',
-						name: 'setColumns',
-						type: 'string',
-						displayOptions: {
-							show: { resource: ['table'], operation: ['update'] },
-						},
-						default: '',
-						required: true,
-						placeholder: "status='done', score=95",
-						description:
-							'Comma-separated column=value pairs (e.g. "status=\'done\', score=95"). String values need single quotes.',
-					},
-					{
-							displayName: 'Filter (WHERE Clause)',
-							name: 'whereClause',
-						type: 'string',
-						displayOptions: { show: { resource: ['table'], operation: ['delete'] } },
-						default: '',
-						required: true,
-						placeholder: "id=1 OR status='inactive'",
-						description:
-							'SQL WHERE conditions. Required as a safety guard — empty WHERE = no delete.',
-					},
+      {
+        displayName: "Filter (WHERE Clause)",
+        name: "updateWhereClause",
+        type: "string",
+        displayOptions: {
+          show: { resource: ["table"], operation: ["update"] },
+        },
+        default: "",
+        required: true,
+        placeholder: "id=42 OR status='pending'",
+        description:
+          "SQL WHERE conditions. Required as a safety guard — empty WHERE = no update.",
+      },
+      {
+        displayName: "Set Columns",
+        name: "setColumns",
+        type: "string",
+        displayOptions: {
+          show: { resource: ["table"], operation: ["update"] },
+        },
+        default: "",
+        required: true,
+        placeholder: "status='done', score=95",
+        description:
+          "Comma-separated column=value pairs (e.g. \"status='done', score=95\"). String values need single quotes.",
+      },
+      {
+        displayName: "Filter (WHERE Clause)",
+        name: "deleteWhereClause",
+        type: "string",
+        displayOptions: {
+          show: { resource: ["table"], operation: ["delete"] },
+        },
+        default: "",
+        required: true,
+        placeholder: "id=1 OR status='inactive'",
+        description:
+          "SQL WHERE conditions. Required as a safety guard — empty WHERE = no delete.",
+      },
 
-					// ======================== QUERY ========================
-			{
-				displayName: 'Operation',
-				name: 'operation',
-				type: 'options',
-				displayOptions: { show: { resource: ['query'] } },
-				noDataExpression: true,
-				options: [
-					{
-						name: 'Persist Memory to Disk',
-						value: 'persist',
-						action: 'Persist memory to disk a query',
-						description: 'Snapshot transient :memory: state to a file-backed database',
-					},
-					{
-						name: 'Select (Custom SQL)',
-						value: 'select',
-						action: 'Select custom sql a query',
-						description: 'Execute raw multi-line SQL queries',
-					},
-					{
-						name: 'Stateless Quack Query',
-						value: 'stateless',
-						action: 'Stateless quack query a query',
-						description: 'Single round-trip query bypassing ATTACH (remote only)',
-					},
-				],
-				default: 'select',
-			},
-			{
-				displayName: 'SQL Query',
-				name: 'sqlQuery',
-				type: 'string',
-				typeOptions: { alwaysOpenEditWindow: true },
-				displayOptions: {
-					show: { resource: ['query'], operation: ['select', 'stateless'] },
-				},
-				default: 'SELECT * FROM target_db.main.orders LIMIT 100;',
-				required: true,
-			},
-			{
-				displayName: 'Output Format',
-				name: 'queryOutputFormat',
-				type: 'options',
-				displayOptions: { show: { resource: ['query'], operation: ['select'] } },
-				options: [
-					{ name: 'Parquet File (Binary)', value: 'parquet' },
-					{ name: 'Standard JSON Array', value: 'json' },
-				],
-				default: 'json',
-			},
-			{
-				displayName: 'Target Disk Path',
-				name: 'targetDiskPath',
-				type: 'string',
-				displayOptions: { show: { resource: ['query'], operation: ['persist'] } },
-				default: '',
-				required: true,
-				placeholder: '/home/user/my_data.db',
-				description:
-					'Path to the .db file to create. All in-memory tables will be copied to this file.',
-			},
-			{
-				displayName: 'Force Overwrite',
-				name: 'forceOverwrite',
-				type: 'boolean',
-				displayOptions: { show: { resource: ['query'], operation: ['persist'] } },
-				default: false,
-				description: 'Whether to overwrite if the target file already exists',
-			},
-		],
-	};
+      // ======================== QUERY ========================
+      {
+        displayName: "Operation",
+        name: "operation",
+        type: "options",
+        displayOptions: { show: { resource: ["query"] } },
+        noDataExpression: true,
+        options: [
+          {
+            name: "Persist Memory to Disk",
+            value: "persist",
+            action: "Persist memory to disk a query",
+            description:
+              "Snapshot transient :memory: state to a file-backed database",
+          },
+          {
+            name: "Select (Custom SQL)",
+            value: "select",
+            action: "Select custom sql a query",
+            description: "Execute raw multi-line SQL queries",
+          },
+          {
+            name: "Stateless Quack Query",
+            value: "stateless",
+            action: "Stateless quack query a query",
+            description:
+              "Single round-trip query bypassing ATTACH (remote only)",
+          },
+        ],
+        default: "select",
+      },
+      {
+        displayName: "SQL Query",
+        name: "sqlQuery",
+        type: "string",
+        typeOptions: { alwaysOpenEditWindow: true },
+        displayOptions: {
+          show: { resource: ["query"], operation: ["select", "stateless"] },
+        },
+        default: "SELECT * FROM target_db.main.orders LIMIT 100;",
+        required: true,
+      },
+      {
+        displayName: "Output Format",
+        name: "queryOutputFormat",
+        type: "options",
+        displayOptions: {
+          show: { resource: ["query"], operation: ["select"] },
+        },
+        options: [
+          { name: "Parquet File (Binary)", value: "parquet" },
+          { name: "Standard JSON Array", value: "json" },
+        ],
+        default: "json",
+      },
+      {
+        displayName: "Target Disk Path",
+        name: "targetDiskPath",
+        type: "string",
+        displayOptions: {
+          show: { resource: ["query"], operation: ["persist"] },
+        },
+        default: "",
+        required: true,
+        placeholder: "/home/user/my_data.db",
+        description:
+          "Path to the .db file to create. All in-memory tables will be copied to this file.",
+      },
+      {
+        displayName: "Force Overwrite",
+        name: "forceOverwrite",
+        type: "boolean",
+        displayOptions: {
+          show: { resource: ["query"], operation: ["persist"] },
+        },
+        default: false,
+        description: "Whether to overwrite if the target file already exists",
+      },
+    ],
+  };
 
-	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		const items = this.getInputData();
-		const returnData: INodeExecutionData[] = [];
-		const resource = this.getNodeParameter('resource', 0) as string;
-		const credentials = await this.getCredentials('duckDbQuackApi');
+  async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
+    const items = this.getInputData();
+    const returnData: INodeExecutionData[] = [];
+    const resource = this.getNodeParameter("resource", 0) as string;
+    const credentials = await this.getCredentials("duckDbQuackApi");
 
-		const instancePath = credentials.connectionType === 'local'
-			? ((credentials.filePath as string) || ':memory:')
-			: `quack_${credentials.host || 'localhost'}`;
-		const cacheKey = instancePath;
-		const instance = await getOrCreateInstance(cacheKey, instancePath);
-		const connection = await instance.connect();
+    const instancePath =
+      credentials.connectionType === "local"
+        ? (credentials.filePath as string) || ":memory:"
+        : `quack_${credentials.host || "localhost"}`;
+    const cacheKey = instancePath;
+    const instance = await getOrCreateInstance(cacheKey, instancePath);
+    const connection = await instance.connect();
 
-		try {
-			// --- Bootstrap extensions (once per instance) ---
-			if (!loadedInstances.has(cacheKey)) {
-				// Enable auto-install for known extensions (JIT loading)
-				await connection.run(`SET autoload_known_extensions = true;`);
-				await connection.run(`SET autoinstall_known_extensions = true;`);
-				for (const ext of CORE_EXTENSIONS) {
-					const spec = parseExtensionSpec(ext);
-					await connection.run(`INSTALL ${spec.install};`);
-					await connection.run(`LOAD ${spec.name};`);
-				}
-				if (credentials.autoLoadExtensions) {
-					const explicitList = (credentials.autoLoadExtensions as string)
-						.split(',')
-						.map((e) => e.trim())
-						.filter((e) => e.length > 0);
-					for (const ext of explicitList) {
-						const spec = parseExtensionSpec(ext);
-						await connection.run(`INSTALL ${spec.install};`);
-						await connection.run(`LOAD ${spec.name};`);
-					}
-				}
-				loadedInstances.add(cacheKey);
-			}
+    try {
+      // --- Bootstrap extensions (once per instance) ---
+      if (!loadedInstances.has(cacheKey)) {
+        // Enable auto-install for known extensions (JIT loading)
+        await connection.run(`SET autoload_known_extensions = true;`);
+        await connection.run(`SET autoinstall_known_extensions = true;`);
+        for (const ext of CORE_EXTENSIONS) {
+          const spec = parseExtensionSpec(ext);
+          await connection.run(`INSTALL ${spec.install};`);
+          await connection.run(`LOAD ${spec.name};`);
+        }
+        if (credentials.autoLoadExtensions) {
+          const explicitList = (credentials.autoLoadExtensions as string)
+            .split(",")
+            .map((e) => e.trim())
+            .filter((e) => e.length > 0);
+          for (const ext of explicitList) {
+            const spec = parseExtensionSpec(ext);
+            await connection.run(`INSTALL ${spec.install};`);
+            await connection.run(`LOAD ${spec.name};`);
+          }
+        }
+        loadedInstances.add(cacheKey);
+      }
 
-			// --- Ensure user extensions are loaded (defensive reload) ---
-			if (credentials.autoLoadExtensions) {
-				const reloadList = (credentials.autoLoadExtensions as string)
-					.split(',')
-					.map((e) => e.trim())
-					.filter((e) => e.length > 0);
-				for (const ext of reloadList) {
-					try {
-						await connection.run(`LOAD ${parseExtensionSpec(ext).name};`);
-					} catch (_e) {
-						// Extension might not be installed yet — INSTALL first
-						const spec = parseExtensionSpec(ext);
-						await connection.run(`INSTALL ${spec.install};`);
-						await connection.run(`LOAD ${spec.name};`);
-					}
-				}
-			}
+      // --- Ensure user extensions are loaded (defensive reload) ---
+      if (credentials.autoLoadExtensions) {
+        const reloadList = (credentials.autoLoadExtensions as string)
+          .split(",")
+          .map((e) => e.trim())
+          .filter((e) => e.length > 0);
+        for (const ext of reloadList) {
+          try {
+            await connection.run(`LOAD ${parseExtensionSpec(ext).name};`);
+          } catch (_e) {
+            // Extension might not be installed yet — INSTALL first
+            const spec = parseExtensionSpec(ext);
+            await connection.run(`INSTALL ${spec.install};`);
+            await connection.run(`LOAD ${spec.name};`);
+          }
+        }
+      }
 
-			// --- Connect: remote ATTACH needed for mutate operations + query ---
-				const isRemote = credentials.connectionType === 'remote';
-				const needsAttach = isRemote &&
-							(resource === 'query' ||
-								(resource === 'table' &&
-									['write', 'update', 'delete'].includes(
-										this.getNodeParameter('operation', 0) as string,
-									)));
+      // --- Connect: remote ATTACH needed for mutate operations + query ---
+      const isRemote = credentials.connectionType === "remote";
+      const needsAttach =
+        isRemote &&
+        (resource === "query" ||
+          (resource === "table" &&
+            ["write", "update", "delete"].includes(
+              this.getNodeParameter("operation", 0) as string,
+            )));
 
-				if (needsAttach) {
-				const host = (credentials.host as string) || 'quack:localhost:9494';
-				const token = credentials.token as string;
-				const disableSsl = credentials.disableSsl as boolean;
+      if (needsAttach) {
+        const host = (credentials.host as string) || "quack:localhost:9494";
+        const token = credentials.token as string;
+        const disableSsl = credentials.disableSsl as boolean;
 
-				await connection.run(`INSTALL quack;`);
-				await connection.run(`LOAD quack;`);
-				if (token) {
-					await connection.run(
-						`CREATE OR REPLACE SECRET (TYPE quack, TOKEN '${token.replace(/'/g, "''")}', SCOPE '${host.replace(/'/g, "''")}');`,
-					);
-				}
-				const sslFlag = disableSsl ? ', DISABLE_SSL true' : '';
-				try {
-					await connection.run(
-						`ATTACH '${host.replace(/'/g, "''")}' AS target_db (TYPE quack${sslFlag});`,
-					);
-				} catch (_e) {
-					try {
-						await connection.run(`DETACH target_db;`);
-					} catch (_e2) {
-						/* ignore */
-					}
-					await connection.run(
-						`ATTACH '${host.replace(/'/g, "''")}' AS target_db (TYPE quack${sslFlag});`,
-					);
-				}
-				await connection.run(`USE target_db;`);
-			}
-			// Local: instance already owns the file — no ATTACH needed
+        await connection.run(`INSTALL quack;`);
+        await connection.run(`LOAD quack;`);
+        if (token) {
+          await connection.run(
+            `CREATE OR REPLACE SECRET (TYPE quack, TOKEN '${token.replace(/'/g, "''")}', SCOPE '${host.replace(/'/g, "''")}');`,
+          );
+        }
+        const sslFlag = disableSsl ? ", DISABLE_SSL true" : "";
+        try {
+          await connection.run(
+            `ATTACH '${host.replace(/'/g, "''")}' AS target_db (TYPE quack${sslFlag});`,
+          );
+        } catch (_e) {
+          try {
+            await connection.run(`DETACH target_db;`);
+          } catch (_e2) {
+            /* ignore */
+          }
+          await connection.run(
+            `ATTACH '${host.replace(/'/g, "''")}' AS target_db (TYPE quack${sslFlag});`,
+          );
+        }
+        await connection.run(`USE target_db;`);
+      }
+      // Local: instance already owns the file — no ATTACH needed
 
-			// --- Helpers ---
-			const exportParquet = async (sql: string, filename: string) => {
-					const tmpFile = path.join(os.tmpdir(), `n8n_duck_${Date.now()}.parquet`);
-					try {
-						await connection.run(
-							`COPY (${sql}) TO '${tmpFile.replace(/'/g, "''")}' (FORMAT 'PARQUET');`,
-						);
-						const fileBuffer = fs.readFileSync(tmpFile);
-						const binaryData = await this.helpers.prepareBinaryData(
-							fileBuffer,
-							filename,
-							'application/vnd.apache.parquet',
-						);
-						return binaryData;
-					} finally {
-						try { fs.unlinkSync(tmpFile); } catch (_e) { /* already gone */ }
-					}
-				};
+      // --- Helpers ---
+      const exportParquet = async (sql: string, filename: string) => {
+        const tmpFile = path.join(
+          os.tmpdir(),
+          `n8n_duck_${Date.now()}.parquet`,
+        );
+        try {
+          await connection.run(
+            `COPY (${sql}) TO '${tmpFile.replace(/'/g, "''")}' (FORMAT 'PARQUET');`,
+          );
+          const fileBuffer = fs.readFileSync(tmpFile);
+          const binaryData = await this.helpers.prepareBinaryData(
+            fileBuffer,
+            filename,
+            "application/vnd.apache.parquet",
+          );
+          return binaryData;
+        } finally {
+          try {
+            fs.unlinkSync(tmpFile);
+          } catch (_e) {
+            /* already gone */
+          }
+        }
+      };
 
-			// Helper: run a query via stateless quack_query (avoids ATTACH streaming conflicts)
-			const runRemoteQuery = async (
-					creds: Record<string, unknown>,
-					sql: string,
-			): Promise<Array<Record<string, unknown>>> => {
-				const host = (creds.host as string) || 'quack:localhost:9494';
-				const token = creds.token as string;
-				const disableSsl = creds.disableSsl as boolean;
-				const escapedSql = sql.replace(/'/g, "''");
-				const tokenArg = token ? `, token := '${token.replace(/'/g, "''")}'` : '';
-				const sslArg = disableSsl ? ', disable_ssl := true' : '';
-				const result = await connection.runAndReadAll(
-					`FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`,
-				);
-				return result.getRowObjectsJson();
-			};
+      // Helper: run a query or DML via stateless quack_query (avoids ATTACH streaming conflicts)
+      const runRemoteQuery = async (
+        creds: Record<string, unknown>,
+        sql: string,
+      ): Promise<Array<Record<string, unknown>>> => {
+        const host = (creds.host as string) || "quack:localhost:9494";
+        const token = creds.token as string;
+        const disableSsl = creds.disableSsl as boolean;
+        const escapedSql = sql.replace(/'/g, "''");
+        const tokenArg = token
+          ? `, token := '${token.replace(/'/g, "''")}'`
+          : "";
+        const sslArg = disableSsl ? ", disable_ssl := true" : "";
+        const result = await connection.runAndReadAll(
+          `FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`,
+        );
+        return result.getRowObjectsJson();
+      };
 
-			// Helper: run DML (UPDATE/DELETE) via stateless quack_query for remote
-				const runRemoteDml = async (
-					creds: Record<string, unknown>,
-					sql: string,
-				): Promise<void> => {
-					const host = (creds.host as string) || 'quack:localhost:9494';
-					const token = creds.token as string;
-					const disableSsl = creds.disableSsl as boolean;
-					const escapedSql = sql.replace(/'/g, "''");
-					const tokenArg = token ? `, token := '${token.replace(/'/g, "''")}'` : '';
-					const sslArg = disableSsl ? ', disable_ssl := true' : '';
-					// DML via quack_query returns empty — runAndReadAll handles this fine
-					await connection.runAndReadAll(
-						`FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`,
-					);
-				};
+      // ========================== TABLE ==========================
+      if (resource === "table") {
+        const op = this.getNodeParameter("operation", 0) as string;
 
-				// ========================== TABLE ==========================
-				if (resource === 'table') {
-				const op = this.getNodeParameter('operation', 0) as string;
+        if (op === "listColumns") {
+          const rawTable = this.getNodeParameter("tableName", 0) as string;
+          const table = validateTableName(rawTable, this.getNode(), 0);
+          const sql = `DESCRIBE ${table}`;
+          const rows = isRemote
+            ? await runRemoteQuery(credentials, sql)
+            : (await connection.runAndReadAll(`${sql};`)).getRowObjectsJson();
+          for (const row of rows) {
+            returnData.push({
+              json: row as unknown as IDataObject,
+              pairedItem: { item: 0 },
+            });
+          }
+        } else if (op === "listTables") {
+          const sql = "SHOW ALL TABLES";
+          const rows = isRemote
+            ? await runRemoteQuery(credentials, sql)
+            : (await connection.runAndReadAll(`${sql};`)).getRowObjectsJson();
+          for (const row of rows) {
+            returnData.push({
+              json: row as unknown as IDataObject,
+              pairedItem: { item: 0 },
+            });
+          }
+        } else if (op === "read") {
+          const rawTable = this.getNodeParameter("tableName", 0) as string;
+          const table = validateTableName(rawTable, this.getNode(), 0);
+          const format = this.getNodeParameter("outputFormat", 0) as string;
+          const whereClause = this.getNodeParameter(
+            "whereClause",
+            0,
+            "",
+          ) as string;
+          const limit = this.getNodeParameter("limit", 0, "") as
+            | number
+            | string;
 
-				if (op === 'listColumns') {
-					const rawTable = this.getNodeParameter('tableName', 0) as string;
-					const table = validateTableName(rawTable, this.getNode(), 0);
-					const sql = `DESCRIBE ${table}`;
-					const rows = isRemote
-						? await runRemoteQuery(credentials, sql)
-						: (await connection.runAndReadAll(`${sql};`)).getRowObjectsJson();
-					for (const row of rows) {
-						returnData.push({
-							json: row as unknown as IDataObject,
-							pairedItem: { item: 0 },
-						});
-					}
-				} else if (op === 'listTables') {
-					const sql = 'SHOW ALL TABLES';
-					const rows = isRemote
-						? await runRemoteQuery(credentials, sql)
-						: (await connection.runAndReadAll(`${sql};`)).getRowObjectsJson();
-					for (const row of rows) {
-						returnData.push({
-							json: row as unknown as IDataObject,
-							pairedItem: { item: 0 },
-						});
-					}
-				} else if (op === 'read') {
-					const rawTable = this.getNodeParameter('tableName', 0) as string;
-					const table = validateTableName(rawTable, this.getNode(), 0);
-					const format = this.getNodeParameter('outputFormat', 0) as string;
-					const whereClause = this.getNodeParameter('whereClause', 0, '') as string;
-					const limit = this.getNodeParameter('limit', 0, '') as number | string;
+          let sql = `SELECT * FROM ${table}`;
+          if (whereClause && whereClause.trim()) {
+            sql += ` WHERE ${whereClause.trim()}`;
+          }
+          if (limit && Number(limit) > 0) {
+            sql += ` LIMIT ${Number(limit)}`;
+          }
 
-					let sql = `SELECT * FROM ${table}`;
-					if (whereClause && whereClause.trim()) {
-						sql += ` WHERE ${whereClause.trim()}`;
-					}
-					if (limit && Number(limit) > 0) {
-						sql += ` LIMIT ${Number(limit)}`;
-					}
+          if (format === "parquet") {
+            const binaryData = await exportParquet(sql, `${table}.parquet`);
+            returnData.push({
+              json: {
+                rowCount: "Streamed to Parquet file",
+              } as unknown as IDataObject,
+              binary: { data: binaryData },
+              pairedItem: { item: 0 },
+            });
+          } else {
+            const rows = isRemote
+              ? await runRemoteQuery(credentials, sql)
+              : (await connection.runAndReadAll(`${sql};`)).getRowObjectsJson();
+            for (const row of rows) {
+              returnData.push({
+                json: row as unknown as IDataObject,
+                pairedItem: { item: 0 },
+              });
+            }
+          }
+        } else if (op === "write") {
+          const rawTable = this.getNodeParameter("tableName", 0) as string;
+          const table = validateTableName(rawTable, this.getNode(), 0);
+          const mode = this.getNodeParameter("writeMode", 0) as string;
+          const columnTypes = this.getNodeParameter(
+            "columnTypes",
+            0,
+            "varchar",
+          ) as string;
 
-					if (format === 'parquet') {
-						const binaryData = await exportParquet(sql, `${table}.parquet`);
-						returnData.push({
-							json: { rowCount: 'Streamed to Parquet file' } as unknown as IDataObject,
-							binary: { data: binaryData },
-							pairedItem: { item: 0 },
-						});
-					} else {
-						const rows = isRemote
-							? await runRemoteQuery(credentials, sql)
-							: (await connection.runAndReadAll(`${sql};`)).getRowObjectsJson();
-						for (const row of rows) {
-							returnData.push({
-								json: row as unknown as IDataObject,
-								pairedItem: { item: 0 },
-							});
-						}
-					}
-				} else if (op === 'write') {
-					const rawTable = this.getNodeParameter('tableName', 0) as string;
-					const table = validateTableName(rawTable, this.getNode(), 0);
-					const mode = this.getNodeParameter('writeMode', 0) as string;
-					const columnTypes = this.getNodeParameter('columnTypes', 0, 'varchar') as string;
+          if (items.length === 0) {
+            returnData.push({
+              json: { rows_inserted: 0 } as unknown as IDataObject,
+              pairedItem: { item: 0 },
+            });
+          } else {
+            if (mode === "overwrite") {
+              await connection.run(`DROP TABLE IF EXISTS ${table};`);
+            }
 
-					if (items.length === 0) {
-						returnData.push({
-							json: { rows_inserted: 0 } as unknown as IDataObject,
-							pairedItem: { item: 0 },
-						});
-					} else {
-						if (mode === 'overwrite') {
-							await connection.run(`DROP TABLE IF EXISTS ${table};`);
-						}
+            const sampleRow = items[0].json;
+            const columns = Object.keys(sampleRow);
 
-						const sampleRow = items[0].json;
-						const columns = Object.keys(sampleRow);
+            if (columns.length === 0) {
+              throw new NodeOperationError(
+                this.getNode(),
+                "No columns found in input data. Provide at least one key-value pair.",
+                { itemIndex: 0 },
+              );
+            }
 
-						if (columns.length === 0) {
-							throw new NodeOperationError(
-								this.getNode(),
-								'No columns found in input data. Provide at least one key-value pair.',
-								{ itemIndex: 0 },
-							);
-						}
+            if (columnTypes === "auto" && mode === "overwrite") {
+              // Auto-detect: build VALUES clause, let DuckDB infer types
+              const valueRows = items.map((item) => {
+                const vals = columns.map((col) => {
+                  const val = item.json[col];
+                  if (val === undefined || val === null) return "NULL";
+                  if (typeof val === "boolean") return val ? "TRUE" : "FALSE";
+                  if (typeof val === "string") {
+                    // Detect ISO dates: YYYY-MM-DD
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return `DATE '${val}'`;
+                    // Detect timestamps: YYYY-MM-DD[ T]HH:MM:SS[.fff]
+                    if (
+                      /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(
+                        val,
+                      )
+                    )
+                      return `TIMESTAMP '${val}'`;
+                    return `'${val.replace(/'/g, "''")}'`;
+                  }
+                  return String(val);
+                });
+                return `(${vals.join(", ")})`;
+              });
+              const createSql = `CREATE OR REPLACE TABLE ${table} AS SELECT * FROM (VALUES ${valueRows.join(", ")}) t(${columns.join(", ")});`;
+              await connection.run(createSql);
+              returnData.push({
+                json: { rows_inserted: items.length } as unknown as IDataObject,
+                pairedItem: { item: 0 },
+              });
+            } else {
+              // VARCHAR fallback (or append to existing table)
+              const colDefs = columns.map((c) => `${c} VARCHAR`).join(", ");
+              await connection.run(
+                `CREATE TABLE IF NOT EXISTS ${table} (${colDefs});`,
+              );
 
-						if (columnTypes === 'auto' && mode === 'overwrite') {
-							// Auto-detect: build VALUES clause, let DuckDB infer types
-							const valueRows = items.map((item) => {
-								const vals = columns.map((col) => {
-									const val = item.json[col];
-									if (val === undefined || val === null) return 'NULL';
-														if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
-														if (typeof val === 'string') {
-															// Detect ISO dates: YYYY-MM-DD
-															if (/^\d{4}-\d{2}-\d{2}$/.test(val))
-																return `DATE '${val}'`;
-															// Detect timestamps: YYYY-MM-DD[ T]HH:MM:SS[.fff]
-																									if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(val))
-																										return `TIMESTAMP '${val}'`;
-															return `'${val.replace(/'/g, "''")}'`;
-														}
-														return String(val);
-								});
-								return `(${vals.join(', ')})`;
-							});
-							const createSql = `CREATE OR REPLACE TABLE ${table} AS SELECT * FROM (VALUES ${valueRows.join(', ')}) t(${columns.join(', ')});`;
-							await connection.run(createSql);
-							returnData.push({
-								json: { rows_inserted: items.length } as unknown as IDataObject,
-								pairedItem: { item: 0 },
-							});
-						} else {
-							// VARCHAR fallback (or append to existing table)
-							const colDefs = columns.map((c) => `${c} VARCHAR`).join(', ');
-							await connection.run(
-								`CREATE TABLE IF NOT EXISTS ${table} (${colDefs});`,
-							);
+              if (isRemote) {
+                // Quack: batch INSERT via SQL (appender has chunk limits over HTTP)
+                const valueRows: string[] = [];
+                let inserted = 0;
+                for (let i = 0; i < items.length; i++) {
+                  const vals = columns.map((col) => {
+                    const val = items[i].json[col];
+                    if (val === undefined || val === null) return "NULL";
+                    return `'${String(val).replace(/'/g, "''")}'`;
+                  });
+                  valueRows.push(`(${vals.join(", ")})`);
+                  inserted++;
+                }
+                if (valueRows.length > 0) {
+                  await connection.run(
+                    `INSERT INTO ${table} (${columns.join(", ")}) VALUES ${valueRows.join(", ")};`,
+                  );
+                }
+                returnData.push({
+                  json: { rows_inserted: inserted } as unknown as IDataObject,
+                  pairedItem: { item: 0 },
+                });
+              } else {
+                // Local: use appender for efficiency
+                const appender = await connection.createAppender(table);
+                let inserted = 0;
+                for (let i = 0; i < items.length; i++) {
+                  const row = items[i].json;
+                  try {
+                    for (const col of columns) {
+                      const val = row[col];
+                      if (val === undefined || val === null) {
+                        appender.appendNull();
+                      } else {
+                        appender.appendVarchar(String(val));
+                      }
+                    }
+                    appender.endRow();
+                    inserted++;
+                  } catch (itemError) {
+                    if (this.continueOnFail()) {
+                      returnData.push({
+                        json: {
+                          error: (itemError as Error).message,
+                        } as unknown as IDataObject,
+                        error: itemError as NodeOperationError,
+                        pairedItem: { item: i },
+                      });
+                      continue;
+                    }
+                    throw new NodeApiError(
+                      this.getNode(),
+                      itemError as unknown as JsonObject,
+                      { itemIndex: i },
+                    );
+                  }
+                }
+                appender.closeSync();
+                returnData.push({
+                  json: { rows_inserted: inserted } as unknown as IDataObject,
+                  pairedItem: { item: 0 },
+                });
+              }
+            }
+          }
+        } else if (op === "update") {
+          const rawTable = this.getNodeParameter("tableName", 0) as string;
+          const table = isRemote
+            ? rawTable
+            : validateTableName(rawTable, this.getNode(), 0);
+          const whereClause = (
+            this.getNodeParameter("updateWhereClause", 0) as string
+          ).trim();
+          const setColumns = (
+            this.getNodeParameter("setColumns", 0) as string
+          ).trim();
 
-							if (isRemote) {
-								// Quack: batch INSERT via SQL (appender has chunk limits over HTTP)
-								const valueRows: string[] = [];
-								let inserted = 0;
-								for (let i = 0; i < items.length; i++) {
-									const vals = columns.map((col) => {
-										const val = items[i].json[col];
-										if (val === undefined || val === null) return 'NULL';
-										return `'${String(val).replace(/'/g, "''")}'`;
-									});
-									valueRows.push(`(${vals.join(', ')})`);
-									inserted++;
-								}
-								if (valueRows.length > 0) {
-									await connection.run(
-										`INSERT INTO ${table} (${columns.join(', ')}) VALUES ${valueRows.join(', ')};`,
-									);
-								}
-								returnData.push({
-									json: { rows_inserted: inserted } as unknown as IDataObject,
-									pairedItem: { item: 0 },
-								});
-							} else {
-								// Local: use appender for efficiency
-								const appender = await connection.createAppender(table);
-								let inserted = 0;
-								for (let i = 0; i < items.length; i++) {
-									const row = items[i].json;
-									try {
-										for (const col of columns) {
-											const val = row[col];
-											if (val === undefined || val === null) {
-												appender.appendNull();
-											} else {
-												appender.appendVarchar(String(val));
-											}
-										}
-										appender.endRow();
-										inserted++;
-									} catch (itemError) {
-										if (this.continueOnFail()) {
-											returnData.push({
-												json: {
-													error: (itemError as Error).message,
-												} as unknown as IDataObject,
-												error: itemError as NodeOperationError,
-												pairedItem: { item: i },
-											});
-											continue;
-										}
-										throw new NodeApiError(
-											this.getNode(),
-											itemError as unknown as JsonObject,
-											{ itemIndex: i },
-										);
-									}
-								}
-								appender.closeSync();
-								returnData.push({
-									json: { rows_inserted: inserted } as unknown as IDataObject,
-									pairedItem: { item: 0 },
-								});
-							}
-						}
-					}
-				} else if (op === 'update') {
-							const rawTable = this.getNodeParameter('tableName', 0) as string;
-							const table = isRemote
-								? rawTable
-								: validateTableName(rawTable, this.getNode(), 0);
-							const whereClause = (this.getNodeParameter('updateWhereClause', 0) as string).trim();
-							const setColumns = (this.getNodeParameter('setColumns', 0) as string).trim();
+          if (!whereClause) {
+            throw new NodeOperationError(
+              this.getNode(),
+              "UPDATE requires a WHERE clause. Use SQL Query for unconstrained updates.",
+              { itemIndex: 0 },
+            );
+          }
+          if (!setColumns) {
+            throw new NodeOperationError(
+              this.getNode(),
+              "UPDATE requires Set Columns. Provide comma-separated column=value pairs.",
+              { itemIndex: 0 },
+            );
+          }
 
-							if (!whereClause) {
-								throw new NodeOperationError(
-									this.getNode(),
-									'UPDATE requires a WHERE clause. Use SQL Query for unconstrained updates.',
-									{ itemIndex: 0 },
-								);
-							}
-							if (!setColumns) {
-								throw new NodeOperationError(
-									this.getNode(),
-									'UPDATE requires Set Columns. Provide comma-separated column=value pairs.',
-									{ itemIndex: 0 },
-								);
-							}
+          // Count matching rows first
+          const countSql = `SELECT COUNT(*) AS cnt FROM ${rawTable} WHERE ${whereClause};`;
+          const countRows = isRemote
+            ? await runRemoteQuery(credentials, countSql)
+            : (await connection.runAndReadAll(countSql)).getRowObjectsJson();
+          const updated = Number(countRows[0]?.cnt ?? 0);
 
-								// Count matching rows first
-								const countSql = `SELECT COUNT(*) AS cnt FROM ${rawTable} WHERE ${whereClause};`;
-								const countRows = isRemote
-									? await runRemoteQuery(credentials, countSql)
-									: (await connection.runAndReadAll(countSql)).getRowObjectsJson();
-								const updated = Number(countRows[0]?.cnt ?? 0);
+          const sql = `UPDATE ${table} SET ${setColumns} WHERE ${whereClause};`;
 
-								const sql = `UPDATE ${table} SET ${setColumns} WHERE ${whereClause};`;
+          // Remote: send UPDATE via quack_query (ATTACH doesn't support DML on Quack tables)
+          if (isRemote) {
+            await runRemoteQuery(credentials, sql);
+          } else {
+            await connection.run(sql);
+          }
+          returnData.push({
+            json: { rows_updated: updated } as unknown as IDataObject,
+            pairedItem: { item: 0 },
+          });
+        } else if (op === "delete") {
+          const rawTable = this.getNodeParameter("tableName", 0) as string;
+          const table = isRemote
+            ? rawTable
+            : validateTableName(rawTable, this.getNode(), 0);
+          const whereClause = (
+            this.getNodeParameter("deleteWhereClause", 0) as string
+          ).trim();
 
-								// Remote: send UPDATE via quack_query (ATTACH doesn't support DML on Quack tables)
-								if (isRemote) {
-									await runRemoteDml(credentials, sql);
-								} else {
-									await connection.run(sql);
-								}
-								returnData.push({
-									json: { rows_updated: updated } as unknown as IDataObject,
-									pairedItem: { item: 0 },
-								});
-							} else if (op === 'delete') {
-							const rawTable = this.getNodeParameter('tableName', 0) as string;
-							const table = isRemote
-								? rawTable
-								: validateTableName(rawTable, this.getNode(), 0);
-							const whereClause = (this.getNodeParameter('whereClause', 0) as string).trim();
+          if (!whereClause) {
+            throw new NodeOperationError(
+              this.getNode(),
+              "DELETE requires a WHERE clause. Use SQL Query for unconstrained deletes.",
+              { itemIndex: 0 },
+            );
+          }
 
-							if (!whereClause) {
-								throw new NodeOperationError(
-									this.getNode(),
-									'DELETE requires a WHERE clause. Use SQL Query for unconstrained deletes.',
-									{ itemIndex: 0 },
-								);
-							}
+          // Count matching rows first
+          const countSql = `SELECT COUNT(*) AS cnt FROM ${rawTable} WHERE ${whereClause};`;
+          const countRows = isRemote
+            ? await runRemoteQuery(credentials, countSql)
+            : (await connection.runAndReadAll(countSql)).getRowObjectsJson();
+          const deleted = Number(countRows[0]?.cnt ?? 0);
 
-							// Count matching rows first
-							const countSql = `SELECT COUNT(*) AS cnt FROM ${rawTable} WHERE ${whereClause};`;
-							const countRows = isRemote
-								? await runRemoteQuery(credentials, countSql)
-								: (await connection.runAndReadAll(countSql)).getRowObjectsJson();
-							const deleted = Number(countRows[0]?.cnt ?? 0);
+          // Remote: send DELETE via quack_query (ATTACH doesn't support DML on Quack tables)
+          if (isRemote) {
+            await runRemoteQuery(
+              credentials,
+              `DELETE FROM ${rawTable} WHERE ${whereClause};`,
+            );
+          } else {
+            const sql = `DELETE FROM ${table} WHERE ${whereClause};`;
+            await connection.run(sql);
+          }
+          returnData.push({
+            json: { rows_deleted: deleted } as unknown as IDataObject,
+            pairedItem: { item: 0 },
+          });
+        }
+      }
 
-							// Remote: send DELETE via quack_query (ATTACH doesn't support DML on Quack tables)
-							if (isRemote) {
-								await runRemoteDml(credentials, `DELETE FROM ${rawTable} WHERE ${whereClause};`);
-							} else {
-								const sql = `DELETE FROM ${table} WHERE ${whereClause};`;
-								await connection.run(sql);
-							}
-							returnData.push({
-								json: { rows_deleted: deleted } as unknown as IDataObject,
-								pairedItem: { item: 0 },
-							});
-							}
-							}
+      // ========================== QUERY ==========================
+      else if (resource === "query") {
+        const op = this.getNodeParameter("operation", 0) as string;
 
-							// ========================== QUERY ==========================
-							else if (resource === 'query') {
-				const op = this.getNodeParameter('operation', 0) as string;
+        if (op === "persist") {
+          if (isRemote || (credentials.filePath as string) !== ":memory:") {
+            throw new NodeOperationError(
+              this.getNode(),
+              'Persist Memory to Disk requires Connection Mode to be "Local" and File Path set to ":memory:".',
+              { itemIndex: 0 },
+            );
+          }
+          const dest = this.getNodeParameter("targetDiskPath", 0) as string;
+          const overwrite = this.getNodeParameter(
+            "forceOverwrite",
+            0,
+          ) as boolean;
 
-				if (op === 'persist') {
-					if (isRemote || (credentials.filePath as string) !== ':memory:') {
-						throw new NodeOperationError(
-							this.getNode(),
-							'Persist Memory to Disk requires Connection Mode to be "Local" and File Path set to ":memory:".',
-							{ itemIndex: 0 },
-						);
-					}
-					const dest = this.getNodeParameter('targetDiskPath', 0) as string;
-					const overwrite = this.getNodeParameter('forceOverwrite', 0) as boolean;
+          if (fs.existsSync(dest)) {
+            if (overwrite) {
+              fs.unlinkSync(dest);
+              // Clear cached instance so next read gets fresh data
+              instanceCache.delete(dest);
+            } else {
+              throw new NodeOperationError(
+                this.getNode(),
+                `Target file already exists: ${dest}. Enable "Force Overwrite" to replace it.`,
+                { itemIndex: 0 },
+              );
+            }
+          }
 
-					if (fs.existsSync(dest)) {
-						if (overwrite) {
-										fs.unlinkSync(dest);
-										// Clear cached instance so next read gets fresh data
-										instanceCache.delete(dest);
-									} else {
-							throw new NodeOperationError(
-								this.getNode(),
-								`Target file already exists: ${dest}. Enable "Force Overwrite" to replace it.`,
-								{ itemIndex: 0 },
-							);
-						}
-					}
+          await connection.run(
+            `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`,
+          );
+          const tablesResult = await connection.runAndReadAll(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
+          );
+          const tables = tablesResult.getRowObjectsJson();
+          let copied = 0;
+          for (const t of tables) {
+            const name = t.table_name as string;
+            await connection.run(
+              `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM main.${name};`,
+            );
+            copied++;
+          }
+          await connection.run(`DETACH disk_db;`);
+          returnData.push({
+            json: {
+              success: true,
+              message: `Saved ${copied} tables to ${dest}`,
+            } as unknown as IDataObject,
+            pairedItem: { item: 0 },
+          });
+        } else if (op === "select") {
+          const sql = this.getNodeParameter("sqlQuery", 0) as string;
+          const format = this.getNodeParameter(
+            "queryOutputFormat",
+            0,
+          ) as string;
 
-					await connection.run(`ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`);
-					const tablesResult = await connection.runAndReadAll(
-						"SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
-					);
-					const tables = tablesResult.getRowObjectsJson();
-					let copied = 0;
-							for (const t of tables) {
-											const name = t.table_name as string;
-											await connection.run(
-												`CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM main.${name};`,
-											);
-											copied++;
-					}
-					await connection.run(`DETACH disk_db;`);
-					returnData.push({
-						json: {
-							success: true,
-							message: `Saved ${copied} tables to ${dest}`,
-						} as unknown as IDataObject,
-						pairedItem: { item: 0 },
-					});
-				} else if (op === 'select') {
-					const sql = this.getNodeParameter('sqlQuery', 0) as string;
-					const format = this.getNodeParameter('queryOutputFormat', 0) as string;
+          if (format === "parquet") {
+            const binaryData = await exportParquet(sql, "query_output.parquet");
+            returnData.push({
+              json: {
+                rowCount: "Query output saved to Parquet format",
+              } as unknown as IDataObject,
+              binary: { data: binaryData },
+              pairedItem: { item: 0 },
+            });
+          } else {
+            // Split multi-statement SQL: run DDL/PRAGMA/etc with run(),
+            // only the last statement produces output
+            const statements = sql
+              .split(";")
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0);
+            for (let i = 0; i < statements.length - 1; i++) {
+              try {
+                await connection.run(`${statements[i]};`);
+              } catch (_s) {
+                this.logger.warn(
+                  `Multi-statement SQL: intermediate statement failed (statement ${i + 1}/${statements.length - 1}): ${(statements[i] || "").substring(0, 80)}`,
+                  { error: (_s as Error).message },
+                );
+              }
+            }
+            const lastSql =
+              statements.length > 0
+                ? `${statements[statements.length - 1]};`
+                : sql;
+            const result = await connection.runAndReadAll(lastSql);
+            const rows = result.getRowObjectsJson();
+            for (const row of rows) {
+              returnData.push({
+                json: row as unknown as IDataObject,
+                pairedItem: { item: 0 },
+              });
+            }
+          }
+        } else if (op === "stateless") {
+          if (!isRemote) {
+            throw new NodeOperationError(
+              this.getNode(),
+              'Stateless Quack Query requires Connection Mode to be "Remote". Use "Select (Custom SQL)" for local queries.',
+              { itemIndex: 0 },
+            );
+          }
+          const host = (credentials.host as string) || "quack:localhost:9494";
+          const token = credentials.token as string;
+          const disableSsl = credentials.disableSsl as boolean;
+          const sql = this.getNodeParameter("sqlQuery", 0) as string;
+          const escapedSql = sql.replace(/'/g, "''");
 
-					if (format === 'parquet') {
-						const binaryData = await exportParquet(sql, 'query_output.parquet');
-						returnData.push({
-							json: {
-								rowCount: 'Query output saved to Parquet format',
-							} as unknown as IDataObject,
-							binary: { data: binaryData },
-							pairedItem: { item: 0 },
-						});
-					} else {
-						// Split multi-statement SQL: run DDL/PRAGMA/etc with run(),
-						// only the last statement produces output
-						const statements = sql
-							.split(';')
-							.map((s) => s.trim())
-							.filter((s) => s.length > 0);
-						for (let i = 0; i < statements.length - 1; i++) {
-							try {
-								await connection.run(`${statements[i]};`);
-							} catch (_s) {
-											this.logger.warn(
-												`Multi-statement SQL: intermediate statement failed (statement ${i + 1}/${statements.length - 1}): ${(statements[i] || '').substring(0, 80)}`,
-												{ error: (_s as Error).message },
-											);
-							}
-						}
-						const lastSql = statements.length > 0
-							? `${statements[statements.length - 1]};`
-							: sql;
-						const result = await connection.runAndReadAll(lastSql);
-						const rows = result.getRowObjectsJson();
-						for (const row of rows) {
-							returnData.push({
-								json: row as unknown as IDataObject,
-								pairedItem: { item: 0 },
-							});
-						}
-					}
-				} else if (op === 'stateless') {
-					if (!isRemote) {
-						throw new NodeOperationError(
-							this.getNode(),
-							'Stateless Quack Query requires Connection Mode to be "Remote". Use "Select (Custom SQL)" for local queries.',
-							{ itemIndex: 0 },
-						);
-					}
-					const host = (credentials.host as string) || 'quack:localhost:9494';
-					const token = credentials.token as string;
-					const disableSsl = credentials.disableSsl as boolean;
-					const sql = this.getNodeParameter('sqlQuery', 0) as string;
-					const escapedSql = sql.replace(/'/g, "''");
+          const tokenArg = token
+            ? `, token := '${token.replace(/'/g, "''")}'`
+            : "";
+          const sslArg = disableSsl ? ", disable_ssl := true" : "";
+          const result = await connection.runAndReadAll(
+            `FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`,
+          );
+          const rows = result.getRowObjectsJson();
+          for (const row of rows) {
+            returnData.push({
+              json: row as unknown as IDataObject,
+              pairedItem: { item: 0 },
+            });
+          }
+        }
+      }
+    } catch (error) {
+      // Quietly ignore shutdown errors (Ctrl+C tears down DuckDB mid-query)
+      const msg = (error as Error).message;
+      if (
+        msg.includes("database is closed") ||
+        msg.includes("Connection closed")
+      ) {
+        return [returnData];
+      }
+      if (this.continueOnFail()) {
+        returnData.push({
+          json: { error: (error as Error).message } as unknown as IDataObject,
+          error: error as NodeOperationError,
+          pairedItem: { item: 0 },
+        });
+      } else {
+        throw new NodeApiError(this.getNode(), error as unknown as JsonObject, {
+          itemIndex: 0,
+        });
+      }
+    } finally {
+      try {
+        connection.closeSync();
+      } catch (_e) {
+        /* ignore shutdown errors */
+      }
+    }
 
-					const tokenArg = token ? `, token := '${token.replace(/'/g, "''")}'` : '';
-					const sslArg = disableSsl ? ', disable_ssl := true' : '';
-					const result = await connection.runAndReadAll(
-						`FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`,
-					);
-					const rows = result.getRowObjectsJson();
-					for (const row of rows) {
-						returnData.push({
-							json: row as unknown as IDataObject,
-							pairedItem: { item: 0 },
-						});
-					}
-				}
-			}
-		} catch (error) {
-				// Quietly ignore shutdown errors (Ctrl+C tears down DuckDB mid-query)
-				const msg = (error as Error).message;
-				if (msg.includes('database is closed') || msg.includes('Connection closed')) {
-					return [returnData];
-				}
-				if (this.continueOnFail()) {
-				returnData.push({
-					json: { error: (error as Error).message } as unknown as IDataObject,
-					error: error as NodeOperationError,
-					pairedItem: { item: 0 },
-				});
-			} else {
-				throw new NodeApiError(this.getNode(), error as unknown as JsonObject, {
-					itemIndex: 0,
-				});
-			}
-		} finally {
-			try {
-				connection.closeSync();
-			} catch (_e) {
-				/* ignore shutdown errors */
-			}
-		}
-
-		return [returnData];
-	}
+    return [returnData];
+  }
 }

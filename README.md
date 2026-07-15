@@ -48,6 +48,8 @@ Multiple credentials pointing to the same file path share a single DuckDB instan
 | List Tables | Fetch all tables in the current catalog | ✅ | ✅ |
 | Read Table | Stream records (JSON or Parquet output) | ✅ | ✅ |
 | Write / Append Rows | Insert data (Append or Overwrite modes) | ✅ | ✅ |
+| Update Rows | Modify records using SQL WHERE clause and SET column-value pairs | ✅ | ✅ |
+| Delete Rows | Remove records matching a SQL WHERE condition (required safety guard) | ✅ | ✅ |
 
 Remote write operations use batch SQL INSERT to avoid appender chunk limits over HTTP.
 

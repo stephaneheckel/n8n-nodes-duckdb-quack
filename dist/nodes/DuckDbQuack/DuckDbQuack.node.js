@@ -44,7 +44,7 @@ async function getOrCreateInstance(key, path) {
     const entry = instanceCache.get(key);
     if (entry)
         return entry;
-    const dbPath = path.startsWith('quack_') ? ':memory:' : path;
+    const dbPath = path.startsWith("quack_") ? ":memory:" : path;
     const inst = await node_api_1.DuckDBInstance.create(dbPath);
     instanceCache.set(key, inst);
     return inst;
@@ -59,7 +59,7 @@ function validateTableName(name, node, itemIndex) {
     }
     return trimmed;
 }
-const CORE_EXTENSIONS = ['httpfs'];
+const CORE_EXTENSIONS = ["httpfs"];
 function parseExtensionSpec(spec) {
     const trimmed = spec.trim();
     const parts = trimmed.split(/\s+/);
@@ -73,33 +73,33 @@ class DuckDbQuack {
             loadOptions: {
                 async getTables() {
                     const run = async () => {
-                        const credentials = await this.getCredentials('duckDbQuackApi');
-                        const instancePath = credentials.connectionType === 'local'
-                            ? (credentials.filePath || ':memory:')
-                            : `quack_${credentials.host || 'localhost'}`;
+                        const credentials = await this.getCredentials("duckDbQuackApi");
+                        const instancePath = credentials.connectionType === "local"
+                            ? credentials.filePath || ":memory:"
+                            : `quack_${credentials.host || "localhost"}`;
                         const cacheKey = instancePath;
                         const instance = await getOrCreateInstance(cacheKey, instancePath);
                         const connection = await instance.connect();
                         try {
-                            if (credentials.connectionType === 'remote') {
-                                const host = credentials.host || 'quack:localhost:9494';
+                            if (credentials.connectionType === "remote") {
+                                const host = credentials.host || "quack:localhost:9494";
                                 const token = credentials.token;
                                 const disableSsl = credentials.disableSsl;
                                 const tokenArg = token
                                     ? `, token := '${token.replace(/'/g, "''")}'`
-                                    : '';
-                                const sslArg = disableSsl ? ', disable_ssl := true' : '';
+                                    : "";
+                                const sslArg = disableSsl ? ", disable_ssl := true" : "";
                                 const result = await connection.runAndReadAll(`FROM quack_query('${host.replace(/'/g, "''")}', 'SHOW ALL TABLES'${tokenArg}${sslArg});`);
                                 const rows = result.getRowObjectsJson();
                                 return rows.map((row) => ({
-                                    name: `[${row.schema}] ${row.name}${row.temporary ? ' (Temp)' : ''}`,
+                                    name: `[${row.schema}] ${row.name}${row.temporary ? " (Temp)" : ""}`,
                                     value: `${row.schema}.${row.name}`,
                                 }));
                             }
-                            const result = await connection.runAndReadAll('SHOW ALL TABLES;');
+                            const result = await connection.runAndReadAll("SHOW ALL TABLES;");
                             const rows = result.getRowObjectsJson();
                             return rows.map((row) => ({
-                                name: `[${row.schema}] ${row.name}${row.temporary ? ' (Temp)' : ''}`,
+                                name: `[${row.schema}] ${row.name}${row.temporary ? " (Temp)" : ""}`,
                                 value: `${row.schema}.${row.name}`,
                             }));
                         }
@@ -107,7 +107,7 @@ class DuckDbQuack {
                             return [
                                 {
                                     name: `Error fetching metadata: ${error.message}`,
-                                    value: 'error',
+                                    value: "error",
                                 },
                             ];
                         }
@@ -131,261 +131,278 @@ class DuckDbQuack {
             },
         };
         this.description = {
-            displayName: 'DuckDB Client',
-            name: 'duckDbQuack',
-            icon: { light: 'file:duckdb.svg', dark: 'file:duckdb.svg' },
-            group: ['transform'],
+            displayName: "DuckDB Client",
+            name: "duckDbQuack",
+            icon: { light: "file:duckdb.svg", dark: "file:duckdb.svg" },
+            group: ["transform"],
             version: 1,
             subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
-            description: 'Open, Read, Write, and Query data using local DuckDB files or high-speed Quack remote endpoints',
-            defaults: { name: 'DuckDB Engine' },
+            description: "Open, Read, Write, and Query data using local DuckDB files or high-speed Quack remote endpoints",
+            defaults: { name: "DuckDB Engine" },
             inputs: [n8n_workflow_1.NodeConnectionTypes.Main],
             outputs: [n8n_workflow_1.NodeConnectionTypes.Main],
             usableAsTool: true,
-            credentials: [{ name: 'duckDbQuackApi', required: true }],
+            credentials: [{ name: "duckDbQuackApi", required: true }],
             properties: [
                 {
-                    displayName: 'Resource',
-                    name: 'resource',
-                    type: 'options',
+                    displayName: "Resource",
+                    name: "resource",
+                    type: "options",
                     noDataExpression: true,
                     options: [
-                        { name: 'Query / Administration', value: 'query' },
-                        { name: 'Table', value: 'table' },
+                        { name: "Query / Administration", value: "query" },
+                        { name: "Table", value: "table" },
                     ],
-                    default: 'table',
+                    default: "table",
                 },
                 {
-                    displayName: 'Operation',
-                    name: 'operation',
-                    type: 'options',
-                    displayOptions: { show: { resource: ['table'] } },
+                    displayName: "Operation",
+                    name: "operation",
+                    type: "options",
+                    displayOptions: { show: { resource: ["table"] } },
                     noDataExpression: true,
                     options: [
                         {
-                            name: 'List Columns',
-                            value: 'listColumns',
-                            action: 'List columns a table',
-                            description: 'Inspect structural properties and column definitions',
+                            name: "List Columns",
+                            value: "listColumns",
+                            action: "List columns a table",
+                            description: "Inspect structural properties and column definitions",
                         },
                         {
-                            name: 'List Tables',
-                            value: 'listTables',
-                            action: 'List tables a table',
-                            description: 'Fetch all tables visible in the current catalog',
+                            name: "List Tables",
+                            value: "listTables",
+                            action: "List tables a table",
+                            description: "Fetch all tables visible in the current catalog",
                         },
                         {
-                            name: 'Read Table',
-                            value: 'read',
-                            action: 'Read table a table',
-                            description: 'Stream records from an active table',
+                            name: "Read Table",
+                            value: "read",
+                            action: "Read table a table",
+                            description: "Stream records from an active table",
                         },
                         {
-                            name: 'Write / Append Rows',
-                            value: 'write',
-                            action: 'Write append rows a table',
-                            description: 'Insert or map incoming data rows into a table',
+                            name: "Write / Append Rows",
+                            value: "write",
+                            action: "Write append rows a table",
+                            description: "Insert or map incoming data rows into a table",
                         },
                         {
-                            name: 'Update Rows',
-                            value: 'update',
-                            action: 'Update rows in a table',
-                            description: 'Modify existing records matched by a key column',
+                            name: "Update Rows",
+                            value: "update",
+                            action: "Update rows in a table",
+                            description: "Modify records using SQL WHERE clause and SET column-value pairs",
                         },
                         {
-                            name: 'Delete Rows',
-                            value: 'delete',
-                            action: 'Delete rows from a table',
-                            description: 'Remove records matched by a WHERE condition',
+                            name: "Delete Rows",
+                            value: "delete",
+                            action: "Delete rows from a table",
+                            description: "Remove records matched by a WHERE condition",
                         },
                     ],
-                    default: 'read',
+                    default: "read",
                 },
                 {
-                    displayName: 'Table Name or ID',
-                    name: 'tableName',
-                    type: 'options',
-                    typeOptions: { loadOptionsMethod: 'getTables' },
+                    displayName: "Table Name or ID",
+                    name: "tableName",
+                    type: "options",
+                    typeOptions: { loadOptionsMethod: "getTables" },
                     displayOptions: {
-                        show: { resource: ['table'], operation: ['listColumns', 'read', 'update', 'delete'] },
+                        show: {
+                            resource: ["table"],
+                            operation: ["listColumns", "read", "update", "delete"],
+                        },
                     },
-                    default: '',
+                    default: "",
                     required: true,
                     description: 'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
                 },
                 {
-                    displayName: 'Table Name',
-                    name: 'tableName',
-                    type: 'string',
+                    displayName: "Table Name",
+                    name: "tableName",
+                    type: "string",
                     displayOptions: {
-                        show: { resource: ['table'], operation: ['write'] },
+                        show: { resource: ["table"], operation: ["write"] },
                     },
-                    default: '',
+                    default: "",
                     required: true,
-                    placeholder: 'my_table',
-                    description: 'Name of the table to write to (e.g., employees). For in-memory databases, use just the table name. The table is auto-created if missing.',
+                    placeholder: "my_table",
+                    description: "Name of the table to write to (e.g., employees). For in-memory databases, use just the table name. The table is auto-created if missing.",
                 },
                 {
-                    displayName: 'Filter (WHERE Clause)',
-                    name: 'whereClause',
-                    type: 'string',
-                    displayOptions: { show: { resource: ['table'], operation: ['read'] } },
-                    default: '',
+                    displayName: "Filter (WHERE Clause)",
+                    name: "whereClause",
+                    type: "string",
+                    displayOptions: { show: { resource: ["table"], operation: ["read"] } },
+                    default: "",
                     required: false,
                     placeholder: "score > 80 AND name LIKE 'A%'",
-                    description: 'SQL WHERE conditions applied at the database level before data reaches n8n',
+                    description: "SQL WHERE conditions applied at the database level before data reaches n8n",
                 },
                 {
-                    displayName: 'Limit',
-                    name: 'limit',
-                    type: 'number',
-                    displayOptions: { show: { resource: ['table'], operation: ['read'] } },
-                    default: '',
+                    displayName: "Limit",
+                    name: "limit",
+                    type: "number",
+                    displayOptions: { show: { resource: ["table"], operation: ["read"] } },
+                    default: "",
                     required: false,
-                    placeholder: '100',
-                    description: 'Maximum number of rows to return. Leave empty for all records.',
+                    placeholder: "100",
+                    description: "Maximum number of rows to return. Leave empty for all records.",
                 },
                 {
-                    displayName: 'Output Format',
-                    name: 'outputFormat',
-                    type: 'options',
-                    displayOptions: { show: { resource: ['table'], operation: ['read'] } },
+                    displayName: "Output Format",
+                    name: "outputFormat",
+                    type: "options",
+                    displayOptions: { show: { resource: ["table"], operation: ["read"] } },
                     options: [
-                        { name: 'Parquet File (Binary)', value: 'parquet' },
-                        { name: 'Standard JSON Array', value: 'json' },
+                        { name: "Parquet File (Binary)", value: "parquet" },
+                        { name: "Standard JSON Array", value: "json" },
                     ],
-                    default: 'json',
+                    default: "json",
                 },
                 {
-                    displayName: 'Write Mode',
-                    name: 'writeMode',
-                    type: 'options',
-                    displayOptions: { show: { resource: ['table'], operation: ['write'] } },
+                    displayName: "Write Mode",
+                    name: "writeMode",
+                    type: "options",
+                    displayOptions: { show: { resource: ["table"], operation: ["write"] } },
                     options: [
-                        { name: 'Append Rows', value: 'append' },
-                        { name: 'Overwrite / Recreate', value: 'overwrite' },
+                        { name: "Append Rows", value: "append" },
+                        { name: "Overwrite / Recreate", value: "overwrite" },
                     ],
-                    default: 'append',
+                    default: "append",
                 },
                 {
-                    displayName: 'Column Types',
-                    name: 'columnTypes',
-                    type: 'options',
-                    displayOptions: { show: { resource: ['table'], operation: ['write'], writeMode: ['overwrite'] } },
-                    options: [
-                        {
-                            name: 'VARCHAR (Safe — all types preserved as text)',
-                            value: 'varchar',
-                        },
-                        {
-                            name: 'Auto-Detect (Infer INT, DOUBLE, DATE from data)',
-                            value: 'auto',
-                        },
-                    ],
-                    default: 'varchar',
-                    description: 'VARCHAR preserves everything as text. Auto-detect uses DuckDB type inference on VALUES for proper integers, floats, and dates.',
-                },
-                {
-                    displayName: 'Filter (WHERE Clause)',
-                    name: 'updateWhereClause',
-                    type: 'string',
+                    displayName: "Column Types",
+                    name: "columnTypes",
+                    type: "options",
                     displayOptions: {
-                        show: { resource: ['table'], operation: ['update'] },
+                        show: {
+                            resource: ["table"],
+                            operation: ["write"],
+                            writeMode: ["overwrite"],
+                        },
                     },
-                    default: '',
+                    options: [
+                        {
+                            name: "VARCHAR (Safe — all types preserved as text)",
+                            value: "varchar",
+                        },
+                        {
+                            name: "Auto-Detect (Infer INT, DOUBLE, DATE from data)",
+                            value: "auto",
+                        },
+                    ],
+                    default: "varchar",
+                    description: "VARCHAR preserves everything as text. Auto-detect uses DuckDB type inference on VALUES for proper integers, floats, and dates.",
+                },
+                {
+                    displayName: "Filter (WHERE Clause)",
+                    name: "updateWhereClause",
+                    type: "string",
+                    displayOptions: {
+                        show: { resource: ["table"], operation: ["update"] },
+                    },
+                    default: "",
                     required: true,
                     placeholder: "id=42 OR status='pending'",
-                    description: 'SQL WHERE conditions. Required as a safety guard — empty WHERE = no update.',
+                    description: "SQL WHERE conditions. Required as a safety guard — empty WHERE = no update.",
                 },
                 {
-                    displayName: 'Set Columns',
-                    name: 'setColumns',
-                    type: 'string',
+                    displayName: "Set Columns",
+                    name: "setColumns",
+                    type: "string",
                     displayOptions: {
-                        show: { resource: ['table'], operation: ['update'] },
+                        show: { resource: ["table"], operation: ["update"] },
                     },
-                    default: '',
+                    default: "",
                     required: true,
                     placeholder: "status='done', score=95",
-                    description: 'Comma-separated column=value pairs (e.g. "status=\'done\', score=95"). String values need single quotes.',
+                    description: "Comma-separated column=value pairs (e.g. \"status='done', score=95\"). String values need single quotes.",
                 },
                 {
-                    displayName: 'Filter (WHERE Clause)',
-                    name: 'whereClause',
-                    type: 'string',
-                    displayOptions: { show: { resource: ['table'], operation: ['delete'] } },
-                    default: '',
+                    displayName: "Filter (WHERE Clause)",
+                    name: "deleteWhereClause",
+                    type: "string",
+                    displayOptions: {
+                        show: { resource: ["table"], operation: ["delete"] },
+                    },
+                    default: "",
                     required: true,
                     placeholder: "id=1 OR status='inactive'",
-                    description: 'SQL WHERE conditions. Required as a safety guard — empty WHERE = no delete.',
+                    description: "SQL WHERE conditions. Required as a safety guard — empty WHERE = no delete.",
                 },
                 {
-                    displayName: 'Operation',
-                    name: 'operation',
-                    type: 'options',
-                    displayOptions: { show: { resource: ['query'] } },
+                    displayName: "Operation",
+                    name: "operation",
+                    type: "options",
+                    displayOptions: { show: { resource: ["query"] } },
                     noDataExpression: true,
                     options: [
                         {
-                            name: 'Persist Memory to Disk',
-                            value: 'persist',
-                            action: 'Persist memory to disk a query',
-                            description: 'Snapshot transient :memory: state to a file-backed database',
+                            name: "Persist Memory to Disk",
+                            value: "persist",
+                            action: "Persist memory to disk a query",
+                            description: "Snapshot transient :memory: state to a file-backed database",
                         },
                         {
-                            name: 'Select (Custom SQL)',
-                            value: 'select',
-                            action: 'Select custom sql a query',
-                            description: 'Execute raw multi-line SQL queries',
+                            name: "Select (Custom SQL)",
+                            value: "select",
+                            action: "Select custom sql a query",
+                            description: "Execute raw multi-line SQL queries",
                         },
                         {
-                            name: 'Stateless Quack Query',
-                            value: 'stateless',
-                            action: 'Stateless quack query a query',
-                            description: 'Single round-trip query bypassing ATTACH (remote only)',
+                            name: "Stateless Quack Query",
+                            value: "stateless",
+                            action: "Stateless quack query a query",
+                            description: "Single round-trip query bypassing ATTACH (remote only)",
                         },
                     ],
-                    default: 'select',
+                    default: "select",
                 },
                 {
-                    displayName: 'SQL Query',
-                    name: 'sqlQuery',
-                    type: 'string',
+                    displayName: "SQL Query",
+                    name: "sqlQuery",
+                    type: "string",
                     typeOptions: { alwaysOpenEditWindow: true },
                     displayOptions: {
-                        show: { resource: ['query'], operation: ['select', 'stateless'] },
+                        show: { resource: ["query"], operation: ["select", "stateless"] },
                     },
-                    default: 'SELECT * FROM target_db.main.orders LIMIT 100;',
+                    default: "SELECT * FROM target_db.main.orders LIMIT 100;",
                     required: true,
                 },
                 {
-                    displayName: 'Output Format',
-                    name: 'queryOutputFormat',
-                    type: 'options',
-                    displayOptions: { show: { resource: ['query'], operation: ['select'] } },
+                    displayName: "Output Format",
+                    name: "queryOutputFormat",
+                    type: "options",
+                    displayOptions: {
+                        show: { resource: ["query"], operation: ["select"] },
+                    },
                     options: [
-                        { name: 'Parquet File (Binary)', value: 'parquet' },
-                        { name: 'Standard JSON Array', value: 'json' },
+                        { name: "Parquet File (Binary)", value: "parquet" },
+                        { name: "Standard JSON Array", value: "json" },
                     ],
-                    default: 'json',
+                    default: "json",
                 },
                 {
-                    displayName: 'Target Disk Path',
-                    name: 'targetDiskPath',
-                    type: 'string',
-                    displayOptions: { show: { resource: ['query'], operation: ['persist'] } },
-                    default: '',
+                    displayName: "Target Disk Path",
+                    name: "targetDiskPath",
+                    type: "string",
+                    displayOptions: {
+                        show: { resource: ["query"], operation: ["persist"] },
+                    },
+                    default: "",
                     required: true,
-                    placeholder: '/home/user/my_data.db',
-                    description: 'Path to the .db file to create. All in-memory tables will be copied to this file.',
+                    placeholder: "/home/user/my_data.db",
+                    description: "Path to the .db file to create. All in-memory tables will be copied to this file.",
                 },
                 {
-                    displayName: 'Force Overwrite',
-                    name: 'forceOverwrite',
-                    type: 'boolean',
-                    displayOptions: { show: { resource: ['query'], operation: ['persist'] } },
+                    displayName: "Force Overwrite",
+                    name: "forceOverwrite",
+                    type: "boolean",
+                    displayOptions: {
+                        show: { resource: ["query"], operation: ["persist"] },
+                    },
                     default: false,
-                    description: 'Whether to overwrite if the target file already exists',
+                    description: "Whether to overwrite if the target file already exists",
                 },
             ],
         };
@@ -394,11 +411,11 @@ class DuckDbQuack {
         var _a, _b, _c, _d;
         const items = this.getInputData();
         const returnData = [];
-        const resource = this.getNodeParameter('resource', 0);
-        const credentials = await this.getCredentials('duckDbQuackApi');
-        const instancePath = credentials.connectionType === 'local'
-            ? (credentials.filePath || ':memory:')
-            : `quack_${credentials.host || 'localhost'}`;
+        const resource = this.getNodeParameter("resource", 0);
+        const credentials = await this.getCredentials("duckDbQuackApi");
+        const instancePath = credentials.connectionType === "local"
+            ? credentials.filePath || ":memory:"
+            : `quack_${credentials.host || "localhost"}`;
         const cacheKey = instancePath;
         const instance = await getOrCreateInstance(cacheKey, instancePath);
         const connection = await instance.connect();
@@ -413,7 +430,7 @@ class DuckDbQuack {
                 }
                 if (credentials.autoLoadExtensions) {
                     const explicitList = credentials.autoLoadExtensions
-                        .split(',')
+                        .split(",")
                         .map((e) => e.trim())
                         .filter((e) => e.length > 0);
                     for (const ext of explicitList) {
@@ -426,7 +443,7 @@ class DuckDbQuack {
             }
             if (credentials.autoLoadExtensions) {
                 const reloadList = credentials.autoLoadExtensions
-                    .split(',')
+                    .split(",")
                     .map((e) => e.trim())
                     .filter((e) => e.length > 0);
                 for (const ext of reloadList) {
@@ -440,13 +457,13 @@ class DuckDbQuack {
                     }
                 }
             }
-            const isRemote = credentials.connectionType === 'remote';
+            const isRemote = credentials.connectionType === "remote";
             const needsAttach = isRemote &&
-                (resource === 'query' ||
-                    (resource === 'table' &&
-                        ['write', 'update', 'delete'].includes(this.getNodeParameter('operation', 0))));
+                (resource === "query" ||
+                    (resource === "table" &&
+                        ["write", "update", "delete"].includes(this.getNodeParameter("operation", 0))));
             if (needsAttach) {
-                const host = credentials.host || 'quack:localhost:9494';
+                const host = credentials.host || "quack:localhost:9494";
                 const token = credentials.token;
                 const disableSsl = credentials.disableSsl;
                 await connection.run(`INSTALL quack;`);
@@ -454,7 +471,7 @@ class DuckDbQuack {
                 if (token) {
                     await connection.run(`CREATE OR REPLACE SECRET (TYPE quack, TOKEN '${token.replace(/'/g, "''")}', SCOPE '${host.replace(/'/g, "''")}');`);
                 }
-                const sslFlag = disableSsl ? ', DISABLE_SSL true' : '';
+                const sslFlag = disableSsl ? ", DISABLE_SSL true" : "";
                 try {
                     await connection.run(`ATTACH '${host.replace(/'/g, "''")}' AS target_db (TYPE quack${sslFlag});`);
                 }
@@ -473,39 +490,33 @@ class DuckDbQuack {
                 try {
                     await connection.run(`COPY (${sql}) TO '${tmpFile.replace(/'/g, "''")}' (FORMAT 'PARQUET');`);
                     const fileBuffer = fs.readFileSync(tmpFile);
-                    const binaryData = await this.helpers.prepareBinaryData(fileBuffer, filename, 'application/vnd.apache.parquet');
+                    const binaryData = await this.helpers.prepareBinaryData(fileBuffer, filename, "application/vnd.apache.parquet");
                     return binaryData;
                 }
                 finally {
                     try {
                         fs.unlinkSync(tmpFile);
                     }
-                    catch (_e) { }
+                    catch (_e) {
+                    }
                 }
             };
             const runRemoteQuery = async (creds, sql) => {
-                const host = creds.host || 'quack:localhost:9494';
+                const host = creds.host || "quack:localhost:9494";
                 const token = creds.token;
                 const disableSsl = creds.disableSsl;
                 const escapedSql = sql.replace(/'/g, "''");
-                const tokenArg = token ? `, token := '${token.replace(/'/g, "''")}'` : '';
-                const sslArg = disableSsl ? ', disable_ssl := true' : '';
+                const tokenArg = token
+                    ? `, token := '${token.replace(/'/g, "''")}'`
+                    : "";
+                const sslArg = disableSsl ? ", disable_ssl := true" : "";
                 const result = await connection.runAndReadAll(`FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`);
                 return result.getRowObjectsJson();
             };
-            const runRemoteDml = async (creds, sql) => {
-                const host = creds.host || 'quack:localhost:9494';
-                const token = creds.token;
-                const disableSsl = creds.disableSsl;
-                const escapedSql = sql.replace(/'/g, "''");
-                const tokenArg = token ? `, token := '${token.replace(/'/g, "''")}'` : '';
-                const sslArg = disableSsl ? ', disable_ssl := true' : '';
-                await connection.runAndReadAll(`FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`);
-            };
-            if (resource === 'table') {
-                const op = this.getNodeParameter('operation', 0);
-                if (op === 'listColumns') {
-                    const rawTable = this.getNodeParameter('tableName', 0);
+            if (resource === "table") {
+                const op = this.getNodeParameter("operation", 0);
+                if (op === "listColumns") {
+                    const rawTable = this.getNodeParameter("tableName", 0);
                     const table = validateTableName(rawTable, this.getNode(), 0);
                     const sql = `DESCRIBE ${table}`;
                     const rows = isRemote
@@ -518,8 +529,8 @@ class DuckDbQuack {
                         });
                     }
                 }
-                else if (op === 'listTables') {
-                    const sql = 'SHOW ALL TABLES';
+                else if (op === "listTables") {
+                    const sql = "SHOW ALL TABLES";
                     const rows = isRemote
                         ? await runRemoteQuery(credentials, sql)
                         : (await connection.runAndReadAll(`${sql};`)).getRowObjectsJson();
@@ -530,12 +541,12 @@ class DuckDbQuack {
                         });
                     }
                 }
-                else if (op === 'read') {
-                    const rawTable = this.getNodeParameter('tableName', 0);
+                else if (op === "read") {
+                    const rawTable = this.getNodeParameter("tableName", 0);
                     const table = validateTableName(rawTable, this.getNode(), 0);
-                    const format = this.getNodeParameter('outputFormat', 0);
-                    const whereClause = this.getNodeParameter('whereClause', 0, '');
-                    const limit = this.getNodeParameter('limit', 0, '');
+                    const format = this.getNodeParameter("outputFormat", 0);
+                    const whereClause = this.getNodeParameter("whereClause", 0, "");
+                    const limit = this.getNodeParameter("limit", 0, "");
                     let sql = `SELECT * FROM ${table}`;
                     if (whereClause && whereClause.trim()) {
                         sql += ` WHERE ${whereClause.trim()}`;
@@ -543,10 +554,12 @@ class DuckDbQuack {
                     if (limit && Number(limit) > 0) {
                         sql += ` LIMIT ${Number(limit)}`;
                     }
-                    if (format === 'parquet') {
+                    if (format === "parquet") {
                         const binaryData = await exportParquet(sql, `${table}.parquet`);
                         returnData.push({
-                            json: { rowCount: 'Streamed to Parquet file' },
+                            json: {
+                                rowCount: "Streamed to Parquet file",
+                            },
                             binary: { data: binaryData },
                             pairedItem: { item: 0 },
                         });
@@ -563,11 +576,11 @@ class DuckDbQuack {
                         }
                     }
                 }
-                else if (op === 'write') {
-                    const rawTable = this.getNodeParameter('tableName', 0);
+                else if (op === "write") {
+                    const rawTable = this.getNodeParameter("tableName", 0);
                     const table = validateTableName(rawTable, this.getNode(), 0);
-                    const mode = this.getNodeParameter('writeMode', 0);
-                    const columnTypes = this.getNodeParameter('columnTypes', 0, 'varchar');
+                    const mode = this.getNodeParameter("writeMode", 0);
+                    const columnTypes = this.getNodeParameter("columnTypes", 0, "varchar");
                     if (items.length === 0) {
                         returnData.push({
                             json: { rows_inserted: 0 },
@@ -575,23 +588,23 @@ class DuckDbQuack {
                         });
                     }
                     else {
-                        if (mode === 'overwrite') {
+                        if (mode === "overwrite") {
                             await connection.run(`DROP TABLE IF EXISTS ${table};`);
                         }
                         const sampleRow = items[0].json;
                         const columns = Object.keys(sampleRow);
                         if (columns.length === 0) {
-                            throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'No columns found in input data. Provide at least one key-value pair.', { itemIndex: 0 });
+                            throw new n8n_workflow_1.NodeOperationError(this.getNode(), "No columns found in input data. Provide at least one key-value pair.", { itemIndex: 0 });
                         }
-                        if (columnTypes === 'auto' && mode === 'overwrite') {
+                        if (columnTypes === "auto" && mode === "overwrite") {
                             const valueRows = items.map((item) => {
                                 const vals = columns.map((col) => {
                                     const val = item.json[col];
                                     if (val === undefined || val === null)
-                                        return 'NULL';
-                                    if (typeof val === 'boolean')
-                                        return val ? 'TRUE' : 'FALSE';
-                                    if (typeof val === 'string') {
+                                        return "NULL";
+                                    if (typeof val === "boolean")
+                                        return val ? "TRUE" : "FALSE";
+                                    if (typeof val === "string") {
                                         if (/^\d{4}-\d{2}-\d{2}$/.test(val))
                                             return `DATE '${val}'`;
                                         if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(val))
@@ -600,9 +613,9 @@ class DuckDbQuack {
                                     }
                                     return String(val);
                                 });
-                                return `(${vals.join(', ')})`;
+                                return `(${vals.join(", ")})`;
                             });
-                            const createSql = `CREATE OR REPLACE TABLE ${table} AS SELECT * FROM (VALUES ${valueRows.join(', ')}) t(${columns.join(', ')});`;
+                            const createSql = `CREATE OR REPLACE TABLE ${table} AS SELECT * FROM (VALUES ${valueRows.join(", ")}) t(${columns.join(", ")});`;
                             await connection.run(createSql);
                             returnData.push({
                                 json: { rows_inserted: items.length },
@@ -610,7 +623,7 @@ class DuckDbQuack {
                             });
                         }
                         else {
-                            const colDefs = columns.map((c) => `${c} VARCHAR`).join(', ');
+                            const colDefs = columns.map((c) => `${c} VARCHAR`).join(", ");
                             await connection.run(`CREATE TABLE IF NOT EXISTS ${table} (${colDefs});`);
                             if (isRemote) {
                                 const valueRows = [];
@@ -619,14 +632,14 @@ class DuckDbQuack {
                                     const vals = columns.map((col) => {
                                         const val = items[i].json[col];
                                         if (val === undefined || val === null)
-                                            return 'NULL';
+                                            return "NULL";
                                         return `'${String(val).replace(/'/g, "''")}'`;
                                     });
-                                    valueRows.push(`(${vals.join(', ')})`);
+                                    valueRows.push(`(${vals.join(", ")})`);
                                     inserted++;
                                 }
                                 if (valueRows.length > 0) {
-                                    await connection.run(`INSERT INTO ${table} (${columns.join(', ')}) VALUES ${valueRows.join(', ')};`);
+                                    await connection.run(`INSERT INTO ${table} (${columns.join(", ")}) VALUES ${valueRows.join(", ")};`);
                                 }
                                 returnData.push({
                                     json: { rows_inserted: inserted },
@@ -674,18 +687,18 @@ class DuckDbQuack {
                         }
                     }
                 }
-                else if (op === 'update') {
-                    const rawTable = this.getNodeParameter('tableName', 0);
+                else if (op === "update") {
+                    const rawTable = this.getNodeParameter("tableName", 0);
                     const table = isRemote
                         ? rawTable
                         : validateTableName(rawTable, this.getNode(), 0);
-                    const whereClause = this.getNodeParameter('updateWhereClause', 0).trim();
-                    const setColumns = this.getNodeParameter('setColumns', 0).trim();
+                    const whereClause = this.getNodeParameter("updateWhereClause", 0).trim();
+                    const setColumns = this.getNodeParameter("setColumns", 0).trim();
                     if (!whereClause) {
-                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'UPDATE requires a WHERE clause. Use SQL Query for unconstrained updates.', { itemIndex: 0 });
+                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), "UPDATE requires a WHERE clause. Use SQL Query for unconstrained updates.", { itemIndex: 0 });
                     }
                     if (!setColumns) {
-                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'UPDATE requires Set Columns. Provide comma-separated column=value pairs.', { itemIndex: 0 });
+                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), "UPDATE requires Set Columns. Provide comma-separated column=value pairs.", { itemIndex: 0 });
                     }
                     const countSql = `SELECT COUNT(*) AS cnt FROM ${rawTable} WHERE ${whereClause};`;
                     const countRows = isRemote
@@ -694,7 +707,7 @@ class DuckDbQuack {
                     const updated = Number((_b = (_a = countRows[0]) === null || _a === void 0 ? void 0 : _a.cnt) !== null && _b !== void 0 ? _b : 0);
                     const sql = `UPDATE ${table} SET ${setColumns} WHERE ${whereClause};`;
                     if (isRemote) {
-                        await runRemoteDml(credentials, sql);
+                        await runRemoteQuery(credentials, sql);
                     }
                     else {
                         await connection.run(sql);
@@ -704,14 +717,14 @@ class DuckDbQuack {
                         pairedItem: { item: 0 },
                     });
                 }
-                else if (op === 'delete') {
-                    const rawTable = this.getNodeParameter('tableName', 0);
+                else if (op === "delete") {
+                    const rawTable = this.getNodeParameter("tableName", 0);
                     const table = isRemote
                         ? rawTable
                         : validateTableName(rawTable, this.getNode(), 0);
-                    const whereClause = this.getNodeParameter('whereClause', 0).trim();
+                    const whereClause = this.getNodeParameter("deleteWhereClause", 0).trim();
                     if (!whereClause) {
-                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'DELETE requires a WHERE clause. Use SQL Query for unconstrained deletes.', { itemIndex: 0 });
+                        throw new n8n_workflow_1.NodeOperationError(this.getNode(), "DELETE requires a WHERE clause. Use SQL Query for unconstrained deletes.", { itemIndex: 0 });
                     }
                     const countSql = `SELECT COUNT(*) AS cnt FROM ${rawTable} WHERE ${whereClause};`;
                     const countRows = isRemote
@@ -719,7 +732,7 @@ class DuckDbQuack {
                         : (await connection.runAndReadAll(countSql)).getRowObjectsJson();
                     const deleted = Number((_d = (_c = countRows[0]) === null || _c === void 0 ? void 0 : _c.cnt) !== null && _d !== void 0 ? _d : 0);
                     if (isRemote) {
-                        await runRemoteDml(credentials, `DELETE FROM ${rawTable} WHERE ${whereClause};`);
+                        await runRemoteQuery(credentials, `DELETE FROM ${rawTable} WHERE ${whereClause};`);
                     }
                     else {
                         const sql = `DELETE FROM ${table} WHERE ${whereClause};`;
@@ -731,14 +744,14 @@ class DuckDbQuack {
                     });
                 }
             }
-            else if (resource === 'query') {
-                const op = this.getNodeParameter('operation', 0);
-                if (op === 'persist') {
-                    if (isRemote || credentials.filePath !== ':memory:') {
+            else if (resource === "query") {
+                const op = this.getNodeParameter("operation", 0);
+                if (op === "persist") {
+                    if (isRemote || credentials.filePath !== ":memory:") {
                         throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'Persist Memory to Disk requires Connection Mode to be "Local" and File Path set to ":memory:".', { itemIndex: 0 });
                     }
-                    const dest = this.getNodeParameter('targetDiskPath', 0);
-                    const overwrite = this.getNodeParameter('forceOverwrite', 0);
+                    const dest = this.getNodeParameter("targetDiskPath", 0);
+                    const overwrite = this.getNodeParameter("forceOverwrite", 0);
                     if (fs.existsSync(dest)) {
                         if (overwrite) {
                             fs.unlinkSync(dest);
@@ -766,14 +779,14 @@ class DuckDbQuack {
                         pairedItem: { item: 0 },
                     });
                 }
-                else if (op === 'select') {
-                    const sql = this.getNodeParameter('sqlQuery', 0);
-                    const format = this.getNodeParameter('queryOutputFormat', 0);
-                    if (format === 'parquet') {
-                        const binaryData = await exportParquet(sql, 'query_output.parquet');
+                else if (op === "select") {
+                    const sql = this.getNodeParameter("sqlQuery", 0);
+                    const format = this.getNodeParameter("queryOutputFormat", 0);
+                    if (format === "parquet") {
+                        const binaryData = await exportParquet(sql, "query_output.parquet");
                         returnData.push({
                             json: {
-                                rowCount: 'Query output saved to Parquet format',
+                                rowCount: "Query output saved to Parquet format",
                             },
                             binary: { data: binaryData },
                             pairedItem: { item: 0 },
@@ -781,7 +794,7 @@ class DuckDbQuack {
                     }
                     else {
                         const statements = sql
-                            .split(';')
+                            .split(";")
                             .map((s) => s.trim())
                             .filter((s) => s.length > 0);
                         for (let i = 0; i < statements.length - 1; i++) {
@@ -789,7 +802,7 @@ class DuckDbQuack {
                                 await connection.run(`${statements[i]};`);
                             }
                             catch (_s) {
-                                this.logger.warn(`Multi-statement SQL: intermediate statement failed (statement ${i + 1}/${statements.length - 1}): ${(statements[i] || '').substring(0, 80)}`, { error: _s.message });
+                                this.logger.warn(`Multi-statement SQL: intermediate statement failed (statement ${i + 1}/${statements.length - 1}): ${(statements[i] || "").substring(0, 80)}`, { error: _s.message });
                             }
                         }
                         const lastSql = statements.length > 0
@@ -805,17 +818,19 @@ class DuckDbQuack {
                         }
                     }
                 }
-                else if (op === 'stateless') {
+                else if (op === "stateless") {
                     if (!isRemote) {
                         throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'Stateless Quack Query requires Connection Mode to be "Remote". Use "Select (Custom SQL)" for local queries.', { itemIndex: 0 });
                     }
-                    const host = credentials.host || 'quack:localhost:9494';
+                    const host = credentials.host || "quack:localhost:9494";
                     const token = credentials.token;
                     const disableSsl = credentials.disableSsl;
-                    const sql = this.getNodeParameter('sqlQuery', 0);
+                    const sql = this.getNodeParameter("sqlQuery", 0);
                     const escapedSql = sql.replace(/'/g, "''");
-                    const tokenArg = token ? `, token := '${token.replace(/'/g, "''")}'` : '';
-                    const sslArg = disableSsl ? ', disable_ssl := true' : '';
+                    const tokenArg = token
+                        ? `, token := '${token.replace(/'/g, "''")}'`
+                        : "";
+                    const sslArg = disableSsl ? ", disable_ssl := true" : "";
                     const result = await connection.runAndReadAll(`FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`);
                     const rows = result.getRowObjectsJson();
                     for (const row of rows) {
@@ -829,7 +844,8 @@ class DuckDbQuack {
         }
         catch (error) {
             const msg = error.message;
-            if (msg.includes('database is closed') || msg.includes('Connection closed')) {
+            if (msg.includes("database is closed") ||
+                msg.includes("Connection closed")) {
                 return [returnData];
             }
             if (this.continueOnFail()) {
