@@ -14,6 +14,14 @@ n8n community node for [DuckDB](https://duckdb.org/) — in-process OLAP with lo
 
 Requires DuckDB ≥ v1.5.3. The `@duckdb/node-api` native module requires glibc (not Alpine/musl). The Debian-based n8n image is mandatory.
 
+### Windows: Upgrading the package
+
+Windows locks loaded native DLLs — upgrading the `@duckdb/node-api` native module while n8n is running will fail. If this happens, the node may appear as **corrupted** in the UI.
+
+**To recover:** delete the corrupted node from **Settings → Community Nodes**, then reinstall it while n8n is stopped.
+
+> **Strongly recommended:** test and develop this node on a Unix machine (Linux/macOS). Docker (`n8nio/n8n:latest-debian`) is the most reliable environment. Windows is supported but native module upgrades are fragile.
+
 ## Credentials
 
 ### Local Mode (File / In-Memory)
