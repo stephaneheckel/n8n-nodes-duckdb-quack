@@ -17,6 +17,10 @@ This node has been tested on the following configurations:
 
 ## Installation
 
+This node has been successfully tested on a standard Hostinger server running n8n via Coolify with n8n's regular image (`docker.n8n.io/n8nio/n8n`).
+
+However, the `@duckdb/node-api` native module requires glibc. If your deployment uses an Alpine/musl-based image, switch to the Debian-based variant:
+
 1. In your n8n Docker compose, use the Debian image:
    ```yaml
    image: docker.n8n.io/n8nio/n8n:latest-debian
