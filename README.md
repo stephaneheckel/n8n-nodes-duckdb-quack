@@ -1,6 +1,19 @@
 # n8n-nodes-duckdb-quack
 
-n8n community node for [DuckDB](https://duckdb.org/) — in-process OLAP with local files, in-memory databases, and the high-performance [Quack](https://duckdb.org/docs/current/quack/overview) remote protocol.
+[DuckDB](https://duckdb.org/) is an in-process SQL OLAP database management system. It runs embedded directly within the host application — no separate server process needed — and supports the full SQL standard with advanced analytical functions, windowing, and direct querying of Parquet, CSV, and JSON files. Often described as "SQLite for analytics," it is designed for high-performance analytical workloads on datasets ranging from megabytes to hundreds of gigabytes.
+
+[Quack](https://duckdb.org/docs/current/quack/overview) is DuckDB's native remote-access protocol, built on HTTP/2 with gRPC streaming. It allows a DuckDB server to expose in-memory databases over the network, enabling multiple clients to query, write, and manage data through a high-performance binary protocol. Quack is currently in beta (DuckDB v1.5.3+) and is evolving rapidly — the protocol and function names are subject to change until the stable release in DuckDB v2.0.
+
+> **⚠️ Work in Progress** — this community node is provided "as is." APIs, features, and behavior may change. We welcome feedback and contributions.
+
+This node has been tested on the following configurations:
+
+| Platform | n8n Installation | DuckDB Runtime |
+|----------|-----------------|----------------|
+| Hostinger | Coolify (n8n standard image) | Docker container |
+| Windows 11 | npm (local install) | WSL2 (DuckDB CLI) |
+
+> No other configurations have been evaluated at this time.
 
 ## Installation
 
