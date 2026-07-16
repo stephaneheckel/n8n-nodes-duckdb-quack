@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  duckdb-server:
+    image: node:20-slim
+    container_name: duckdb-quack-server
+    restart: unless-stopped
+    ports:
+      - "9494:9494"
+    environment:
+      - QUACK_TOKEN=${QUACK_TOKEN:-super_secret_token_1234}
+      - QUACK_PORT=9494
+      - DB_DIR=/app/data
+    volumes:
+      - duckdb-data:/app/data
+      - duckdb-extensions:/app/.duckdb
+      - duckdb-node-modules:/app/node_modules
+    working_dir: /app
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # TODO: switch to USER node once verified — needs Dockerfile to chown /app at build time
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('net').connect(9494).on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    command: |
+      sh -c "
+      npm install @duckdb/node-api &&
+      cat << 'EOF' > server.mjs
+      import { DuckDBInstance } from '@duckdb/node-api';
+      import process from 'node:process';
+      import { readdirSync } from 'node:fs';
+      import { join } from 'node:path';
+
+      const PORT = process.env.QUACK_PORT || '9494';
+      const TOKEN = process.env.QUACK_TOKEN || 'super_secret_token_1234';
+      const DB_DIR = process.env.DB_DIR || '/app/data';
+
+      async function startServer() {
+        console.log('Initializing DuckDB in memory...');
+        const instance = await DuckDBInstance.create(':memory:');
+        const connection = await instance.connect();
+
+        console.log('Loading Quack extension...');
+        await connection.run('INSTALL quack; LOAD quack;');
+
+        // Scan for .db files in the data directory (log only, no auto-attach)
+        console.log('Scanning for .db files in ' + DB_DIR + '...');
+        var dbFiles = [];
+        try {
+          var entries = readdirSync(DB_DIR);
+          for (var i = 0; i < entries.length; i++) {
+            if (entries[i].endsWith('.db')) {
+              dbFiles.push(join(DB_DIR, entries[i]));
+            }
+          }
+          dbFiles.sort();
+        } catch (e) {
+          console.log('Could not scan directory: ' + e.message);
+        }
+        if (dbFiles.length > 0) {
+          console.log('Found ' + dbFiles.length + ' database file(s):');
+          dbFiles.forEach(function(f) { console.log('  📁 ' + f); });
+          console.log('Use ATTACH to open them from Quack clients.');
+        } else {
+          console.log('No .db files found. Databases can be created via ATTACH from Quack clients.');
+        }
+
+        console.log('Starting Quack server on port ' + PORT + '...');
+        await connection.run(
+          \"CALL quack_serve('quack:0.0.0.0:\" + PORT + \"', token='\" + TOKEN + \"', allow_other_hostname:=true);\"
+        );
+
+        console.log('🚀 DuckDB Quack Server is live on port ' + PORT + '!');
+
+        var shutdown = async function() {
+          console.log('');
+          console.log('Shutting down Quack server...');
+          try {
+            await connection.run(\"CALL quack_stop('quack:0.0.0.0:\" + PORT + \"');\");
+            console.log('Quack server stopped.');
+          } catch (e) {}
+          await connection.close();
+          console.log('Connection closed. Goodbye!');
+          process.exit(0);
+        };
+
+        process.on('SIGTERM', shutdown);
+        process.on('SIGINT', shutdown);
+
+        // Pin the event loop — keep the process alive until SIGTERM/SIGINT
+        setInterval(function() {}, 60000);
+      }
+
+      startServer().catch(function(err) {
+        console.error('Server error:', err);
+        process.exit(1);
+      });
+      EOF
+      node server.mjs
+      "
+
+volumes:
+  duckdb-data:
+    driver: local
+  duckdb-extensions:
+    driver: local
+  duckdb-node-modules:
+    driver: local
