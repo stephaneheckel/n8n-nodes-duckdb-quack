@@ -100,8 +100,8 @@ Remote write operations use batch SQL INSERT to avoid appender chunk limits over
 1. Create a credential: Connection Mode = `Local`, File Path = `:memory:`
 2. Populate data with **Table → Write** (Overwrite mode, table name `employees`)
 3. Query with **Table → Read** or **Query → Select (Custom SQL)** (`SELECT * FROM employees WHERE score > 90`)
-4. Save with **Query → Persist Memory to Disk** → `/home/user/my_data.db`
-5. Create a new credential pointing to `my_data.db` — the data is immediately available
+4. Save with **Query → Persist Memory to Disk** → `/shared/my_backup.db`
+5. Create a new credential pointing to `/shared/my_backup.db` — the data is immediately available
 
 Multiple credentials with `:memory:` share the same database instance, just like multiple credentials pointing to the same file.
 
@@ -165,35 +165,66 @@ The repository includes a self-contained `docker-compose.yml` that starts a pers
    - **Authentication Token:** the value of `QUACK_TOKEN` from your `.env`
    - **Disable SSL Encryption:** check this (direct HTTP/2, no TLS)
 
-### Where .db files live
+### Shared Directory Between n8n and DuckDB Containers
 
-The server boots with an in-memory DuckDB instance bound to the Quack port. Databases are created and accessed via `ATTACH` from your n8n workflows:
+If n8n and the DuckDB Quack server run on the same host (separate Docker containers), use a shared bind mount so both containers access the same `.db` files. The n8n node writes persist/export files, and the DuckDB server can `ATTACH` them — both see the same directory.
+
+**1. Create the shared directory on the host:**
+
+```bash
+sudo mkdir -p /data/shared-duckdb
+sudo chown -R 1000:1000 /data/shared-duckdb
+sudo chmod 775 /data/shared-duckdb
+```
+
+UID/GID `1000:1000` matches the `node` user in both the n8n and `node:20-slim` images.
+
+**2. Mount it in the n8n compose file:**
+
+```yaml
+services:
+  n8n:
+    volumes:
+      - '/data/shared-duckdb:/shared'
+```
+
+**3. Mount it in the DuckDB compose file:**
+
+```yaml
+services:
+  duckdb-server:
+    volumes:
+      - '/data/shared-duckdb:/shared'
+    environment:
+      - DB_DIR=/shared
+```
+
+The DuckDB compose file included in this repo uses `/shared` out of the box. The container also runs `chown -R node:node /shared` at startup to ensure the server process can write, then launches via `su node`.
+
+**4. In your n8n workflows:**
+
+Use `/shared/` as the base path for all file operations:
+
+| Operation | Field | Example |
+|-----------|-------|---------|
+| Persist Memory to Disk | Target Disk Path | `/shared/my_backup.db` |
+| Read Table (Parquet/CSV) | File Path | `/shared/export.parquet` |
+| Select (Custom SQL) | File Path | `/shared/query_result.csv` |
+
+For raw SQL references from Quack clients:
 
 ```sql
--- Create (or open) a persistent database
-ATTACH '/app/data/analytics.db' AS analytics;
-
--- Create tables inside it
+ATTACH '/shared/analytics.db' AS analytics;
 CREATE TABLE analytics.events (id INTEGER, name VARCHAR);
-
--- From now on, queries reference it by alias
 SELECT * FROM analytics.events;
 ```
 
 | Path in SQL | Physical location | Survives redeploy? |
 |-------------|-------------------|--------------------|
-| `/app/data/*.db` | Docker volume `duckdb-data` on the VPS | ✅ Yes |
+| `/shared/*.db` | Host directory `/data/shared-duckdb/` | ✅ Yes — independent of both containers |
 | `:memory:` | Container RAM only | ❌ Lost on restart |
 
-Any `.db` file placed in the `duckdb-data` volume (`/app/data/` inside the container) is listed in the server logs at startup. Clients must `ATTACH` them explicitly to query.
-
-To persist the server's own in-memory tables to a file, use SQL from any Quack client:
-
-```sql
-ATTACH '/app/data/my_backup.db' AS target;
-CREATE TABLE target.employees AS SELECT * FROM employees;
-DETACH target;
-```
+Any `.db` file in `/shared/` is listed in the server logs at startup. Clients must `ATTACH` them explicitly to query.
 
 ### Monitoring & Resource Limits
 
@@ -201,8 +232,7 @@ The compose file includes sensible defaults:
 
 | Setting | Value |
 |---------|-------|
-| Memory limit | 512 MB (hard cap) |
-| Memory reservation | 128 MB |
+| Memory limit | 1 GB (hard cap) |
 | Log rotation | 10 MB × 3 files (30 MB max) |
 | Healthcheck | TCP probe every 30s on port 9494 |
 

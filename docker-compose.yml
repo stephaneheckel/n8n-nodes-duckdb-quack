@@ -10,24 +10,20 @@ services:
     environment:
       - QUACK_TOKEN=${QUACK_TOKEN:-super_secret_token_1234}
       - QUACK_PORT=9494
-      - DB_DIR=/app/data
+      - DB_DIR=/shared
     volumes:
-      - duckdb-data:/app/data
+      - '/data/shared-duckdb:/shared'
       - duckdb-extensions:/app/.duckdb
-      - duckdb-node-modules:/app/node_modules
     working_dir: /app
     deploy:
       resources:
         limits:
-          memory: 512M
-        reservations:
-          memory: 128M
+          memory: 1G
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
-    # TODO: switch to USER node once verified — needs Dockerfile to chown /app at build time
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('net').connect(9494).on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
       interval: 30s
@@ -36,6 +32,7 @@ services:
       start_period: 15s
     command: |
       sh -c "
+      mkdir -p /shared && chown -R node:node /shared &&
       npm install @duckdb/node-api &&
       cat << 'EOF' > server.mjs
       import { DuckDBInstance } from '@duckdb/node-api';
@@ -45,7 +42,7 @@ services:
 
       const PORT = process.env.QUACK_PORT || '9494';
       const TOKEN = process.env.QUACK_TOKEN || 'super_secret_token_1234';
-      const DB_DIR = process.env.DB_DIR || '/app/data';
+      const DB_DIR = process.env.DB_DIR || '/shared';
 
       async function startServer() {
         console.log('Initializing DuckDB in memory...');
@@ -108,13 +105,9 @@ services:
         process.exit(1);
       });
       EOF
-      node server.mjs
+      su node -c 'node server.mjs'
       "
 
 volumes:
-  duckdb-data:
-    driver: local
   duckdb-extensions:
-    driver: local
-  duckdb-node-modules:
     driver: local
