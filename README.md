@@ -18,6 +18,14 @@ The `n8n-nodes-duckdb-quack` repository is a community-built custom node for the
 
 - **Debian-Based Container Support:** Because it relies on native glibc compiling, the node is typically designed to work seamlessly with n8n deployments running on Debian-based Docker containers (`:latest-debian`).
 
+- **Flexible Storage & Connection Modes:** The node allows you to connect to DuckDB in three distinct ways depending on your architecture:
+
+  - **In-Memory (`:memory:`):** Perfect for transient data processing. It spins up a blazing-fast database entirely in RAM to query, join, or filter your workflow's incoming data, then wipes clean when the execution finishes.
+
+  - **Physical File (`.db`):** Connects directly to a physical database file stored on your server or local volume. This allows you to persist data across workflow executions, append new logs, or query an existing persistent datastore.
+
+  - **Quack (Remote):** Connects remotely to manage and process data outside the immediate local file environment.
+
 This node has been tested on the following configurations:
 
 | Platform | n8n Installation | DuckDB Runtime |
