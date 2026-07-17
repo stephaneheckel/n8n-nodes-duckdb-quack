@@ -1101,8 +1101,11 @@ export class DuckDbQuack implements INodeType {
           instanceCache.delete(dest);
           returnData.push({
             json: {
-              success: true,
-              message: `Saved ${copied} tables to ${dest}`,
+              success: copied > 0,
+              message:
+                copied > 0
+                  ? `Saved ${copied} tables to ${dest}`
+                  : `No tables found in memory — nothing to persist`,
             } as unknown as IDataObject,
             pairedItem: { item: 0 },
           });
