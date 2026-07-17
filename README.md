@@ -24,40 +24,29 @@ The `n8n-nodes-duckdb-quack` repository is a community-built custom node for the
 
   - **Quack (Remote):** Connects remotely to manage and process data outside the immediate local file environment.
 
-This node has been tested on the following configurations:
+**This node has been tested on the following configurations:**
 
 | Platform | n8n Installation | DuckDB Runtime |
 |----------|-----------------|----------------|
 | Hostinger | Coolify (n8n standard image) | Docker container |
-| Windows 11 | npm (local install) | WSL2 (DuckDB CLI) |
+| Windows 11 | npm (local installation) | WSL2 (DuckDB CLI) |
+| Windows 11 | npm (local installation) | DuckDB 1.5.4 |
 
-> No other configurations have been evaluated at this time.
+> **Strongly recommended:** test and develop this node on a Unix machine (Linux/macOS). Windows is supported but native module upgrades are fragile as Windows locks loaded native DLLs 
 
 ## Installation
 
 > **⚠️ Work in Progress** — this community node is provided "as is." APIs, features, and behavior may change. We welcome feedback and contributions.
 
-This node has been successfully tested
-
-However, the `@duckdb/node-api` native module requires glibc. If your deployment uses an Alpine/musl-based image, switch to the Debian-based variant:
-
-1. In your n8n Docker compose, use the Debian image:
-   ```yaml
-   image: docker.n8n.io/n8nio/n8n:latest-debian
-   ```
-2. Install via **Settings → Community Nodes** → enter `n8n-nodes-duckdb-quack`
+1. Install the node via n8n menu **Settings → Community Nodes** → enter `n8n-nodes-duckdb-quack`
 
 ## Environment
 
-Requires DuckDB ≥ v1.5.3. The `@duckdb/node-api` native module requires glibc (not Alpine/musl). The Debian-based n8n image is mandatory.
-
-### Windows: Upgrading the package
-
-Windows locks loaded native DLLs — upgrading the `@duckdb/node-api` native module while n8n is running will fail. If this happens, the node may appear as **corrupted** in the UI.
-
-**To recover:** delete the corrupted node from **Settings → Community Nodes**, then reinstall it while n8n is stopped.
-
-> **Strongly recommended:** test and develop this node on a Unix machine (Linux/macOS). Docker (`n8nio/n8n:latest-debian`) is the most reliable environment. Windows is supported but native module upgrades are fragile.
+- Requires DuckDB ≥ v1.5.4. 
+- The `@duckdb/node-api` native module requires glibc. The Debian-based n8n is required (not Alpine/musl). However, the node has been successfully tested on standard n8n installation.
+   ```yaml
+   image: docker.n8n.io/n8nio/n8n:latest-debian
+   ```
 
 ## Credentials
 
@@ -81,7 +70,7 @@ Multiple credentials pointing to the same file path share a single DuckDB instan
 | Disable SSL Encryption | Check for plain HTTP connections (localhost or trusted private subnets). Non-local URIs default to HTTPS. |
 | Auto-Install Extensions | Optional comma-separated list |
 
-> **Note:** Quack is currently in beta (DuckDB v1.5.3+). The protocol and function names are subject to change until DuckDB v2.0 (September 2026).
+> **Note:** Quack is currently in beta (DuckDB v1.5.4+). The protocol and function names are subject to change until DuckDB v2.0 (September 2026).
 
 ## Operations
 
@@ -162,27 +151,15 @@ Multiple credentials with `:memory:` share the same database instance, just like
    ```
 4. Keep the terminal open. In n8n, use credential `quack:localhost:9494` with Disable SSL checked and token `my_token`.
 
-**Option 3: Docker Compose (recommended for VPS / Coolify)**
+**Option 3: Docker Compose (Tested via Coolify)**
 
 The repository includes a self-contained `docker-compose.yml` that starts a persistent Quack server with automatic `.db` file discovery.
 
-1. Copy `docker-compose.yml` to your server (or use it directly from the cloned repository).
+1. In your **Coolify** dashboard, add a new service and use `docker-compose.yml` directly for your compose file. Redeploys do not destroy data — volumes persist across restarts.
 
-2. Create a `.env` file next to it with your token:
-   ```bash
-   echo "QUACK_TOKEN=your_secure_token_here" > .env
-   ```
-
-3. Start the server:
-   ```bash
-   docker compose up -d
-   ```
-
-4. **Coolify-specific:** In your Coolify dashboard, add a new service pointing to this repository or upload the `docker-compose.yml` directly. Coolify automatically picks up `.env` files and named volumes. Redeploys do not destroy data — volumes persist across restarts.
-
-5. In n8n, create a Remote Quack credential:
+2. In n8n, create a Remote Quack credential:
    - **Remote Server URI:** `quack:<server-ip>:9494` (use `quack:localhost:9494` if n8n runs on the same host)
-   - **Authentication Token:** the value of `QUACK_TOKEN` from your `.env`
+   - **Authentication Token:** the value of `QUACK_TOKEN` 
    - **Disable SSL Encryption:** check this (direct HTTP/2, no TLS)
 
 ### Shared Directory Between n8n and DuckDB Containers
@@ -231,20 +208,13 @@ Use `/shared/` as the base path for all file operations:
 | Read Table (Parquet/CSV) | File Path | `/shared/export.parquet` |
 | Select (Custom SQL) | File Path | `/shared/query_result.csv` |
 
-For raw SQL references from Quack clients:
-
-```sql
-ATTACH '/shared/analytics.db' AS analytics;
-CREATE TABLE analytics.events (id INTEGER, name VARCHAR);
-SELECT * FROM analytics.events;
-```
 
 | Path in SQL | Physical location | Survives redeploy? |
 |-------------|-------------------|--------------------|
 | `/shared/*.db` | Host directory `/data/shared-duckdb/` | ✅ Yes — independent of both containers |
 | `:memory:` | Container RAM only | ❌ Lost on restart |
 
-Any `.db` file in `/shared/` is listed in the server logs at startup. Clients must `ATTACH` them explicitly to query.
+Any `.db` file in `/shared/` is listed in the server logs at startup.
 
 ### Monitoring & Resource Limits
 
@@ -317,7 +287,7 @@ INSERT INTO employees VALUES (1, 'Alice'), (2, 'Bob');
 SELECT * FROM employees ORDER BY id;
 ```
 
-Intermediate statement failures (e.g., index already exists) are silently skipped — the final SELECT always runs.
+Intermediate statement failures (e.g., index already exists) are displayed in the console.
 
 ### Extension Loading
 
