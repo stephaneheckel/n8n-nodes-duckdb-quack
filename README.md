@@ -226,6 +226,8 @@ SELECT * FROM analytics.events;
 
 Any `.db` file in `/shared/` is listed in the server logs at startup. Clients must `ATTACH` them explicitly to query.
 
+> **⚠️ Deleting `.db` files:** The n8n node caches DuckDB instances for the lifetime of the n8n process. If you delete a `.db` file from disk (`rm /data/shared-duckdb/employee.db`), the file is still held open by the cached instance — the OS won't free it, and n8n can still query it. To fully release a file, restart n8n (`docker compose restart n8n`).
+
 ### Monitoring & Resource Limits
 
 The compose file includes sensible defaults:
