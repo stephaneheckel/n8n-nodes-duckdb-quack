@@ -35,13 +35,30 @@ async function getOrCreateInstance(
   key: string,
   path: string,
 ): Promise<DuckDBInstance> {
+  const dbPath = path.startsWith("quack_") ? ":memory:" : path;
+
   const entry = instanceCache.get(key);
-  if (entry) return entry;
+  if (entry) {
+    // If file-backed and the file was deleted on disk, evict the stale cache.
+    // :memory: and Quack instances are network-attached — never evicted.
+    const isFileBacked =
+      dbPath !== ":memory:" && !dbPath.startsWith("quack_");
+    if (isFileBacked && !fs.existsSync(dbPath)) {
+      try {
+        entry.closeSync();
+      } catch (_e) {
+        /* already closed */
+      }
+      instanceCache.delete(key);
+      // fall through to create fresh instance
+    } else {
+      return entry;
+    }
+  }
 
   const inFlight = instancePromises.get(key);
   if (inFlight) return inFlight;
 
-  const dbPath = path.startsWith("quack_") ? ":memory:" : path;
   const promise = DuckDBInstance.create(dbPath).then((inst) => {
     instanceCache.set(key, inst);
     instancePromises.delete(key);
@@ -224,7 +241,7 @@ export class DuckDbQuack implements INodeType {
           {
             name: "Write / Append Rows",
             value: "write",
-            action: "Write/append rows to a table",
+            action: 'Write append rows to a table',
             description: "Insert or map incoming data rows into a table",
           },
           {
@@ -302,7 +319,6 @@ export class DuckDbQuack implements INodeType {
         type: "string",
         displayOptions: { show: { resource: ["table"], operation: ["read"] } },
         default: "",
-        required: false,
         placeholder: "score > 80 AND name LIKE 'A%'",
         description:
           "SQL WHERE conditions applied at the database level before data reaches n8n",
@@ -311,12 +327,13 @@ export class DuckDbQuack implements INodeType {
         displayName: "Limit",
         name: "limit",
         type: "number",
+								typeOptions: {
+									minValue: 1,
+								},
         displayOptions: { show: { resource: ["table"], operation: ["read"] } },
-        default: "",
-        required: false,
+        default: 50,
         placeholder: "100",
-        description:
-          "Maximum number of rows to return. Leave empty for all records.",
+        description: 'Max number of results to return',
       },
       {
         displayName: "Output Format",
@@ -342,7 +359,6 @@ export class DuckDbQuack implements INodeType {
           },
         },
         default: "",
-        required: false,
         placeholder: "/data/export.parquet",
         description:
           "Absolute path to write the output file. When set, data is streamed directly to disk. Leave empty to return the file as binary data (Parquet) or inline rows (JSON). Required for CSV.",
@@ -385,11 +401,11 @@ export class DuckDbQuack implements INodeType {
         },
         options: [
           {
-            name: "VARCHAR (Safe — all types preserved as text)",
+            name: 'VARCHAR (Safe — All Types Preserved as Text)',
             value: "varchar",
           },
           {
-            name: "Auto-Detect (Infer INT, DOUBLE, DATE from data)",
+            name: 'Auto-Detect (Infer INT, DOUBLE, DATE From Data)',
             value: "auto",
           },
         ],
@@ -407,7 +423,7 @@ export class DuckDbQuack implements INodeType {
         },
         default: "",
         required: true,
-        placeholder: "id=42 OR status='pending'",
+        placeholder: 'ID=42 OR status=\'pending\'',
         description:
           "SQL WHERE conditions. Required as a safety guard — empty WHERE = no update.",
       },
@@ -433,7 +449,7 @@ export class DuckDbQuack implements INodeType {
         },
         default: "",
         required: true,
-        placeholder: "id=1 OR status='inactive'",
+        placeholder: 'ID=1 OR status=\'inactive\'',
         description:
           "SQL WHERE conditions. Required as a safety guard — empty WHERE = no delete.",
       },
@@ -462,7 +478,7 @@ export class DuckDbQuack implements INodeType {
           {
             name: "Stateless Quack Query",
             value: "stateless",
-            action: "Stateless Quack query",
+            action: 'Stateless quack query',
             description:
               "Single round-trip query bypassing ATTACH (remote only)",
           },
@@ -506,7 +522,6 @@ export class DuckDbQuack implements INodeType {
           },
         },
         default: "",
-        required: false,
         placeholder: "/data/export.parquet",
         description:
           "Absolute path to write the output file. When set, data is streamed directly to disk. Leave empty to return the file as binary data (Parquet) or inline rows (JSON). Required for CSV.",
