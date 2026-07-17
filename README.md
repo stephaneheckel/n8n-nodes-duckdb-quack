@@ -4,8 +4,6 @@
 
 [Quack](https://duckdb.org/docs/current/quack/overview) is DuckDB's native remote-access protocol, built on HTTP/2 with gRPC streaming. It allows a DuckDB server to expose in-memory databases over the network, enabling multiple clients to query, write, and manage data through a high-performance binary protocol. Quack is currently in beta (DuckDB v1.5.3+) and is evolving rapidly — the protocol and function names are subject to change until the stable release in DuckDB v2.0.
 
-> **⚠️ Work in Progress** — this community node is provided "as is." APIs, features, and behavior may change. We welcome feedback and contributions.
-
 The `n8n-nodes-duckdb-quack` repository is a community-built custom node for the n8n automation platform. It integrates DuckDB — a high-performance, in-process analytical database engine — directly into n8n workflows.
 
 ### High-Level Features
@@ -37,7 +35,9 @@ This node has been tested on the following configurations:
 
 ## Installation
 
-This node has been successfully tested on a standard Hostinger server running n8n via Coolify with n8n's regular image (`docker.n8n.io/n8nio/n8n`).
+> **⚠️ Work in Progress** — this community node is provided "as is." APIs, features, and behavior may change. We welcome feedback and contributions.
+
+This node has been successfully tested
 
 However, the `@duckdb/node-api` native module requires glibc. If your deployment uses an Alpine/musl-based image, switch to the Debian-based variant:
 
