@@ -1,10 +1,22 @@
-# n8n-nodes-duckdb-quack
+# The DuckDB & Quack n8n node
 
 [DuckDB](https://duckdb.org/) is an in-process SQL OLAP database management system. It runs embedded directly within the host application — no separate server process needed — and supports the full SQL standard with advanced analytical functions, windowing, and direct querying of Parquet, CSV, and JSON files. Often described as "SQLite for analytics," it is designed for high-performance analytical workloads on datasets ranging from megabytes to hundreds of gigabytes.
 
 [Quack](https://duckdb.org/docs/current/quack/overview) is DuckDB's native remote-access protocol, built on HTTP/2 with gRPC streaming. It allows a DuckDB server to expose in-memory databases over the network, enabling multiple clients to query, write, and manage data through a high-performance binary protocol. Quack is currently in beta (DuckDB v1.5.3+) and is evolving rapidly — the protocol and function names are subject to change until the stable release in DuckDB v2.0.
 
 > **⚠️ Work in Progress** — this community node is provided "as is." APIs, features, and behavior may change. We welcome feedback and contributions.
+
+The `n8n-nodes-duckdb-quack` repository is a community-built custom node for the n8n automation platform. It integrates DuckDB — a high-performance, in-process analytical database engine — directly into n8n workflows.
+
+### High-Level Features
+
+- **In-Workflow Analytical Querying:** It allows n8n workflows to execute fast, analytical SQL queries directly on tabular data, acting as an embedded, serverless database node.
+
+- **Native Node.js Bindings:** The node utilizes native DuckDB API bindings (`@duckdb/node-api`), ensuring highly efficient execution and performance within the Node.js runtime environment of n8n.
+
+- **Large Dataset Aggregation & Transformation:** It enables advanced data manipulation (like complex aggregations, joining distinct datasets, and filtering) that might otherwise hit memory limits or run too slowly using standard JavaScript-based n8n nodes.
+
+- **Debian-Based Container Support:** Because it relies on native glibc compiling, the node is typically designed to work seamlessly with n8n deployments running on Debian-based Docker containers (`:latest-debian`).
 
 This node has been tested on the following configurations:
 
