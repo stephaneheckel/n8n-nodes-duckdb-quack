@@ -284,6 +284,8 @@ docker stats duckdb-quack-server
 4. The `.db` file is immediately unlocked after the operation completes and can be opened by other processes
 5. Create a new Local credential pointing to that file to access it later
 
+> Persist copies only tables from the default `main` schema. Custom schemas are not supported — all Write operations create tables in `main`.
+
 ### Write Mode: Column Types
 
 Tables created by **Write / Append Rows** default to `VARCHAR`. When **Write Mode** is **Overwrite / Recreate**, a **Column Types** option appears:
