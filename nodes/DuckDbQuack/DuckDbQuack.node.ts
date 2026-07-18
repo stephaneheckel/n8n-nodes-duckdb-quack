@@ -578,8 +578,8 @@ export class DuckDbQuack implements INodeType {
         : `quack_${credentials.host || "localhost"}`;
     const cacheKey = instancePath;
 
-    let instance = await getOrCreateInstance(cacheKey, instancePath);
-    let connection = await instance.connect();
+    const instance = await getOrCreateInstance(cacheKey, instancePath);
+    const connection = await instance.connect();
 
     try {
       // --- Bootstrap extensions (once per instance) ---
@@ -662,63 +662,6 @@ export class DuckDbQuack implements INodeType {
           );
         }
         await connection.run(`USE target_db;`);
-
-        // Probe: WSL2 networking can produce stale Quack connection handles
-        // that only manifest on first use. Retry once with a fresh instance.
-        try {
-          await connection.run("SELECT 1;");
-        } catch (probeError) {
-          const msg = (probeError as Error).message;
-          if (
-            msg.includes("Invalid connection id") ||
-            msg.includes("Invalid Input Error")
-          ) {
-            // Evict and bootstrap a fresh connection
-            try { connection.closeSync(); } catch (_e) { /* ignore */ }
-            instanceCache.delete(cacheKey);
-            loadedInstances.delete(cacheKey);
-            instance = await getOrCreateInstance(cacheKey, instancePath);
-            connection = await instance.connect();
-            // Re-run extensions (loadedInstances was cleared)
-            await connection.run(
-              `SET autoload_known_extensions = true;`,
-            );
-            await connection.run(
-              `SET autoinstall_known_extensions = true;`,
-            );
-            for (const ext of CORE_EXTENSIONS) {
-              const spec = parseExtensionSpec(ext);
-              await connection.run(`INSTALL ${spec.install};`);
-              await connection.run(`LOAD ${spec.name};`);
-            }
-            await connection.run(`INSTALL quack;`);
-            await connection.run(`LOAD quack;`);
-            // Reload user's auto-install extensions on the fresh instance
-            if (credentials.autoLoadExtensions) {
-              const list = (credentials.autoLoadExtensions as string)
-                .split(",")
-                .map((e) => e.trim())
-                .filter((e) => e.length > 0);
-              for (const ext of list) {
-                const spec = parseExtensionSpec(ext);
-                await connection.run(`INSTALL ${spec.install};`);
-                await connection.run(`LOAD ${spec.name};`);
-              }
-            }
-            if (token) {
-              await connection.run(
-                `CREATE OR REPLACE SECRET (TYPE quack, TOKEN '${token.replace(/'/g, "''")}', SCOPE '${host.replace(/'/g, "''")}');`,
-              );
-            }
-            await connection.run(
-              `ATTACH '${host.replace(/'/g, "''")}' AS target_db (TYPE quack${sslFlag});`,
-            );
-            await connection.run(`USE target_db;`);
-            loadedInstances.add(cacheKey);
-          } else {
-            throw probeError;
-          }
-        }
       }
       // Local: instance already owns the file — no ATTACH needed
 
@@ -777,10 +720,27 @@ export class DuckDbQuack implements INodeType {
           ? `, token := '${token.replace(/'/g, "''")}'`
           : "";
         const sslArg = disableSsl ? ", disable_ssl := true" : "";
-        const result = await connection.runAndReadAll(
-          `FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`,
-        );
-        return result.getRowObjectsJson();
+        // Retry transient failures (server restart, WSL2 network timing)
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const result = await connection.runAndReadAll(
+              `FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`,
+            );
+            return result.getRowObjectsJson();
+          } catch (error) {
+            const msg = (error as Error).message;
+            if (
+              attempt < 2 &&
+              (msg.includes("Invalid connection id") ||
+                msg.includes("Invalid Input Error"))
+            ) {
+              await new Promise((resolve) => setTimeout(resolve, 200));
+              continue;
+            }
+            throw error;
+          }
+        }
+        throw new Error("unreachable");
       };
 
       // ========================== TABLE ==========================
