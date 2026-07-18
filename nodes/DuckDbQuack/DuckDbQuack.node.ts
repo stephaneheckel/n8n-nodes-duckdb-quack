@@ -647,19 +647,22 @@ export class DuckDbQuack implements INodeType {
           );
         }
         const sslFlag = disableSsl ? ", DISABLE_SSL true" : "";
-        try {
-          await connection.run(
-            `ATTACH '${host.replace(/'/g, "''")}' AS target_db (TYPE quack${sslFlag});`,
-          );
-        } catch (_e) {
+        // Retry ATTACH: same pattern as runRemoteQuery (3 attempts, 200ms delay)
+        for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            await connection.run(`DETACH target_db;`);
-          } catch (_e2) {
-            /* ignore */
+            await connection.run(
+              `ATTACH '${host.replace(/'/g, "''")}' AS target_db (TYPE quack${sslFlag});`,
+            );
+            break;
+          } catch (error) {
+            if (attempt === 2) throw error;
+            try {
+              await connection.run(`DETACH target_db;`);
+            } catch (_e2) {
+              /* ignore */
+            }
+            await new Promise((resolve) => setTimeout(resolve, 200));
           }
-          await connection.run(
-            `ATTACH '${host.replace(/'/g, "''")}' AS target_db (TYPE quack${sslFlag});`,
-          );
         }
         await connection.run(`USE target_db;`);
       }
