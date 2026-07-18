@@ -1,0 +1,22 @@
+return [
+  { id: 1, name: "Alice",   score: 95,  active: true,  joined: "2024-01-15" },
+  { id: 2, name: "Bob",     score: 87,  active: false, joined: "2023-11-02" },
+  { id: 3, name: "Carol",   score: 72,  active: true,  joined: "2024-03-10" },
+  { id: 4, name: "Dave",    score: 88,  active: true,  joined: "2024-06-22" },
+  { id: 5, name: "Eve",     score: 91,  active: false, joined: "2023-08-14" },
+  { id: 6, name: "Frank",   score: 65,  active: true,  joined: "2024-02-28" },
+  { id: 7, name: "Grace",   score: 99,  active: true,  joined: "2024-05-07" },
+  { id: 8, name: "Hank",    score: 73,  active: false, joined: "2023-12-19" },
+  { id: 9, name: "Iris",    score: 84,  active: true,  joined: "2024-07-04" },
+  { id: 10, name: "Jack",   score: 76,  active: false, joined: "2023-09-30" },
+  { id: 11, name: "Kate",   score: 93,  active: true,  joined: "2024-04-11" },
+  { id: 12, name: "Leo",    score: 68,  active: true,  joined: "2023-10-25" },
+  { id: 13, name: "Mia",    score: 97,  active: false, joined: "2024-08-01" },
+  { id: 14, name: "Nick",   score: 81,  active: true,  joined: "2024-01-30" },
+  { id: 15, name: "Olga",   score: 74,  active: false, joined: "2023-07-16" },
+  { id: 16, name: "Paul",   score: 89,  active: true,  joined: "2024-09-05" },
+  { id: 17, name: "Quinn",  score: 62,  active: true,  joined: "2023-06-08" },
+  { id: 18, name: "Rose",   score: 95,  active: false, joined: "2024-10-12" },
+  { id: 19, name: "Sam",    score: 78,  active: true,  joined: "2024-02-20" },
+  { id: 20, name: "Tina",   score: 86,  active: false, joined: "2023-12-01" }
+];
