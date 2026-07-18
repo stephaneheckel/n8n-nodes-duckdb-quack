@@ -577,8 +577,32 @@ export class DuckDbQuack implements INodeType {
         ? (credentials.filePath as string) || ":memory:"
         : `quack_${credentials.host || "localhost"}`;
     const cacheKey = instancePath;
-    const instance = await getOrCreateInstance(cacheKey, instancePath);
-    const connection = await instance.connect();
+
+    let instance = await getOrCreateInstance(cacheKey, instancePath);
+    let connection = await instance.connect();
+
+    // Retry once: stale Quack connections can produce "Invalid connection id"
+    // after server restart or session timeout.
+    const connectAndRetry = async () => {
+      try {
+        // Do a lightweight probe — if the connection is stale, this will throw
+        await connection.run("SELECT 1;");
+      } catch (error) {
+        const msg = (error as Error).message;
+        if (
+          msg.includes("Invalid connection id") ||
+          msg.includes("Invalid Input Error")
+        ) {
+          instanceCache.delete(cacheKey);
+          loadedInstances.delete(cacheKey);
+          instance = await getOrCreateInstance(cacheKey, instancePath);
+          connection = await instance.connect();
+        } else {
+          throw error;
+        }
+      }
+    };
+    await connectAndRetry();
 
     try {
       // --- Bootstrap extensions (once per instance) ---

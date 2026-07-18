@@ -54,9 +54,11 @@ Extensions are loaded once per instance and cached — subsequent executions ski
 
 ## Node Installation
 
-> **⚠️ Work in Progress** — this community node is provided "as is." APIs, features, and behavior may change. We welcome feedback and contributions.
+**⚠️ Work in Progress** — this community node is provided "as is." APIs, features and behavior may change. We welcome feedback and contributions.
 
-1. Install the node via n8n's menu **Settings → Community Nodes** → enter `n8n-nodes-duckdb-quack`
+1. Install the n8n node via n8n's menu **Settings → Community Nodes** → enter `n8n-nodes-duckdb-quack`
+
+2. You do not need to set up or configure a Quack server to use this node. You can easily test and fully evaluate its capabilities using only DuckDB in-memory or on-disk modes locally.
 
 ## Credentials
 
