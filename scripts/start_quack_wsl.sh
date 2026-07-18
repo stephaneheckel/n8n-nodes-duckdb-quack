@@ -41,13 +41,12 @@ echo "  URI:  quack:localhost:9494"
 echo "  Token: test"
 echo "  Disable SSL: checked"
 echo ""
-echo "n8n credential (try localhost first; use IP if localhost fails):"
+echo "(WSL2 auto-forwards localhost — try the WSL IP below if localhost fails)"
 WSL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-echo "  URI:  quack:$WSL_IP:9494"
-echo "  (or quack:localhost:9494 if WSL2 forwarding is active)"
+echo "  Fallback URI: quack:$WSL_IP:9494"
 echo ""
 echo "Press Ctrl+C to stop."
 echo ""
 
-trap "kill $PID 2>/dev/null; wait $PID 2>/dev/null; exit" INT TERM
+trap "kill -INT %1 2>/dev/null; sleep 1; kill -9 %1 2>/dev/null; exit" INT TERM
 wait $PID
