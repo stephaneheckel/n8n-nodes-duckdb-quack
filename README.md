@@ -10,11 +10,7 @@ The `n8n-nodes-duckdb-quack` repository is a community-built custom node for the
 
 - **In-Workflow Analytical Querying:** It allows n8n workflows to execute fast, analytical SQL queries directly on tabular data, acting as an embedded, serverless database node.
 
-- **Native Node.js Bindings:** The node utilizes native DuckDB API bindings (`@duckdb/node-api`), ensuring highly efficient execution and performance within the Node.js runtime environment of n8n.
-
 - **Large Dataset Aggregation & Transformation:** It enables advanced data manipulation (like complex aggregations, joining distinct datasets, and filtering) that might otherwise hit memory limits or run too slowly using standard JavaScript-based n8n nodes.
-
-- **Debian-Based Container Support:** Because it relies on native glibc compiling, the node is typically designed to work seamlessly with n8n deployments running on Debian-based Docker containers (`:latest-debian`).
 
 - **Flexible Storage & Connection Modes:** The node allows you to connect to DuckDB in three distinct ways depending on your architecture:
 
@@ -24,15 +20,17 @@ The `n8n-nodes-duckdb-quack` repository is a community-built custom node for the
 
   - **Quack (Remote):** Connects remotely to manage and process data outside the immediate local file environment.
 
+- **Native Node.js Bindings:** The node utilizes native DuckDB API bindings (`@duckdb/node-api`), ensuring highly efficient execution and performance within the Node.js runtime environment of n8n. Because it relies on native glibc compiling, the node is typically designed to work seamlessly with n8n deployments running on Debian-based Docker containers (`:latest-debian`).
+
 **This node has been tested on the following configurations:**
 
 | Platform | n8n Installation | DuckDB Runtime |
 |----------|-----------------|----------------|
-| Hostinger | Coolify (n8n standard image) | Docker container |
+| Hostinger | Coolify (n8n standard image) | Docker container `docker-compose.yml` |
 | Windows 11 | npm (local installation) | WSL2 (DuckDB CLI) |
 | Windows 11 | npm (local installation) | DuckDB 1.5.4 |
 
-> **Strongly recommended:** test and develop this node on a Unix machine (Linux/macOS). Windows is supported but native module upgrades are fragile as Windows locks loaded native DLLs 
+> **Strongly recommended:** Unix machine (Linux/macOS). Windows is supported but native module upgrades are fragile as Windows locks loaded native DLLs 
 
 ## Installation
 
@@ -70,7 +68,7 @@ Multiple credentials pointing to the same file path share a single DuckDB instan
 | Disable SSL Encryption | Check for plain HTTP connections (localhost or trusted private subnets). Non-local URIs default to HTTPS. |
 | Auto-Install Extensions | Optional comma-separated list |
 
-> **Note:** Quack is currently in beta (DuckDB v1.5.4+). The protocol and function names are subject to change until DuckDB v2.0 (September 2026).
+> **Note:** Quack is currently in beta (DuckDB v1.5.4+). The protocol and function names are subject to change until DuckDB v2.0 (September 2026?).
 
 ## Operations
 
@@ -80,7 +78,7 @@ Multiple credentials pointing to the same file path share a single DuckDB instan
 |-----------|-------------|-------|--------|
 | List Columns | Inspect column names, types, and definitions | ✅ | ✅ |
 | List Tables | Fetch all tables in the current catalog | ✅ | ✅ |
-| Read Table | Stream records (JSON or Parquet output) | ✅ | ✅ |
+| Read Table | Stream records (JSON, CSV or Parquet output) | ✅ | ✅ |
 | Write / Append Rows | Insert data (Append or Overwrite modes) | ✅ | ✅ |
 | Update Rows | Modify records using SQL WHERE clause and SET column-value pairs | ✅ | ✅ |
 | Delete Rows | Remove records matching a SQL WHERE condition (required safety guard) | ✅ | ✅ |
