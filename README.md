@@ -4,6 +4,7 @@
 
 [Quack](https://duckdb.org/docs/current/quack/overview) is DuckDB's native remote-access protocol, built on HTTP/2 with gRPC streaming. It allows a DuckDB server to expose in-memory databases over the network, enabling multiple clients to query, write, and manage data through a high-performance binary protocol. Quack is currently in beta (DuckDB v1.5.3+) and is evolving rapidly — the protocol and function names are subject to change until the stable release in DuckDB v2.0.
 
+## The n8n-nodes-duckdb-quack Project !
 The `n8n-nodes-duckdb-quack` repository is a community-built custom node for the n8n automation platform. It integrates DuckDB — a high-performance, in-process analytical database engine — directly into n8n workflows.
 
 ### High-Level Features
@@ -171,7 +172,7 @@ Multiple credentials with `:memory:` share the same database instance, just like
 
 > **⚠️ Use the WSL IP, not `localhost`:** WSL2 localhost forwarding is unreliable and adds latency. Always use the WSL IP address directly.
 
-> `start_quack_wsl.sh` is also included in the repo as a template, but the interactive approach above is more reliable.
+> `start_quack_wsl.sh` is also included in the repo as an "as is" template for automated startup.
 
 **Option 2: Windows (DuckDB CLI)**
 
