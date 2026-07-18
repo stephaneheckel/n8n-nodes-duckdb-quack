@@ -22,16 +22,6 @@ The `n8n-nodes-duckdb-quack` repository is a community-built custom node for the
 
 - **Native Node.js Bindings:** The node utilizes native DuckDB API bindings (`@duckdb/node-api`), ensuring highly efficient execution and performance within the Node.js runtime environment of n8n. Because it relies on native glibc compiling, the node is typically designed to work seamlessly with n8n deployments running on Debian-based Docker containers (`:latest-debian`).
 
-**This node has been tested on the following configurations:**
-
-| Platform | n8n Installation | DuckDB Runtime |
-|----------|-----------------|----------------|
-| Hostinger | Coolify (n8n standard image) | memory, physical, quack on Docker container `docker-compose.yml` |
-| Windows 11 | npm (local installation) | memory, physical, quack on WSL2 |
-| Windows 11 | npm (local installation) | memory, physical, quack on DuckDB 1.5.4 |
-
-> **Strongly recommended:** Unix machine (Linux/macOS). Windows is supported but native module upgrades are fragile as Windows locks loaded native DLLs 
-
 ## Environment - Prerequisites
 
 - Quack requires DuckDB ≥ v1.5.4. 
@@ -40,6 +30,15 @@ The `n8n-nodes-duckdb-quack` repository is a community-built custom node for the
    image: docker.n8n.io/n8nio/n8n:latest-debian
    ```
 
+**This node has been tested on the following configurations:**
+
+| Platform | n8n Installation | DuckDB Runtime |
+|----------|-----------------|----------------|
+| Hostinger | Coolify (n8n standard image) | memory, physical, quack on Docker, see `docker-compose.yml` |
+| Windows 11 | npm (local installation) | memory, physical, quack on WSL2 |
+| Windows 11 | npm (local installation) | memory, physical, quack on DuckDB 1.5.4 |
+
+> **Strongly recommended:** Unix machine (Linux/macOS). Windows is supported but native module upgrades (n8n node upgrade) are fragile as Windows locks loaded native DLLs 
 
 ## Architecture
 
@@ -83,7 +82,7 @@ Multiple credentials pointing to the same file path share a single DuckDB instan
 
 > **Note:** Quack is currently in beta (DuckDB v1.5.4+). The protocol and function names are subject to change until DuckDB v2.0 (September 2026?).
 
-## Operations
+## Resources & Operations
 
 ### Table Resource
 
@@ -169,6 +168,7 @@ Multiple credentials with `:memory:` share the same database instance, just like
    ```sql
    INSTALL quack;
    LOAD quack;
+   CREATE TABLE products AS SELECT * FROM (VALUES (1, 'Widget', 9.99), (2, 'Gadget', 24.50)) t(id, name, price);
    CALL quack_serve('quack:localhost:9494', token='my_token', allow_other_hostname:=true);
    ```
 4. Keep the terminal open. In n8n, use credential `quack:localhost:9494` with Disable SSL checked and token `my_token`.
