@@ -581,29 +581,6 @@ export class DuckDbQuack implements INodeType {
     let instance = await getOrCreateInstance(cacheKey, instancePath);
     let connection = await instance.connect();
 
-    // Retry once: stale Quack connections can produce "Invalid connection id"
-    // after server restart or session timeout.
-    const connectAndRetry = async () => {
-      try {
-        // Do a lightweight probe — if the connection is stale, this will throw
-        await connection.run("SELECT 1;");
-      } catch (error) {
-        const msg = (error as Error).message;
-        if (
-          msg.includes("Invalid connection id") ||
-          msg.includes("Invalid Input Error")
-        ) {
-          instanceCache.delete(cacheKey);
-          loadedInstances.delete(cacheKey);
-          instance = await getOrCreateInstance(cacheKey, instancePath);
-          connection = await instance.connect();
-        } else {
-          throw error;
-        }
-      }
-    };
-    await connectAndRetry();
-
     try {
       // --- Bootstrap extensions (once per instance) ---
       if (!loadedInstances.has(cacheKey)) {
@@ -685,6 +662,51 @@ export class DuckDbQuack implements INodeType {
           );
         }
         await connection.run(`USE target_db;`);
+
+        // Probe: WSL2 networking can produce stale Quack connection handles
+        // that only manifest on first use. Retry once with a fresh instance.
+        try {
+          await connection.run("SELECT 1;");
+        } catch (probeError) {
+          const msg = (probeError as Error).message;
+          if (
+            msg.includes("Invalid connection id") ||
+            msg.includes("Invalid Input Error")
+          ) {
+            // Evict and bootstrap a fresh connection
+            try { connection.closeSync(); } catch (_e) { /* ignore */ }
+            instanceCache.delete(cacheKey);
+            loadedInstances.delete(cacheKey);
+            instance = await getOrCreateInstance(cacheKey, instancePath);
+            connection = await instance.connect();
+            // Re-run extensions (loadedInstances was cleared)
+            await connection.run(
+              `SET autoload_known_extensions = true;`,
+            );
+            await connection.run(
+              `SET autoinstall_known_extensions = true;`,
+            );
+            for (const ext of CORE_EXTENSIONS) {
+              const spec = parseExtensionSpec(ext);
+              await connection.run(`INSTALL ${spec.install};`);
+              await connection.run(`LOAD ${spec.name};`);
+            }
+            await connection.run(`INSTALL quack;`);
+            await connection.run(`LOAD quack;`);
+            if (token) {
+              await connection.run(
+                `CREATE OR REPLACE SECRET (TYPE quack, TOKEN '${token.replace(/'/g, "''")}', SCOPE '${host.replace(/'/g, "''")}');`,
+              );
+            }
+            await connection.run(
+              `ATTACH '${host.replace(/'/g, "''")}' AS target_db (TYPE quack${sslFlag});`,
+            );
+            await connection.run(`USE target_db;`);
+            loadedInstances.add(cacheKey);
+          } else {
+            throw probeError;
+          }
+        }
       }
       // Local: instance already owns the file — no ATTACH needed
 
