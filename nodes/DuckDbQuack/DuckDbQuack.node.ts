@@ -693,6 +693,18 @@ export class DuckDbQuack implements INodeType {
             }
             await connection.run(`INSTALL quack;`);
             await connection.run(`LOAD quack;`);
+            // Reload user's auto-install extensions on the fresh instance
+            if (credentials.autoLoadExtensions) {
+              const list = (credentials.autoLoadExtensions as string)
+                .split(",")
+                .map((e) => e.trim())
+                .filter((e) => e.length > 0);
+              for (const ext of list) {
+                const spec = parseExtensionSpec(ext);
+                await connection.run(`INSTALL ${spec.install};`);
+                await connection.run(`LOAD ${spec.name};`);
+              }
+            }
             if (token) {
               await connection.run(
                 `CREATE OR REPLACE SECRET (TYPE quack, TOKEN '${token.replace(/'/g, "''")}', SCOPE '${host.replace(/'/g, "''")}');`,
