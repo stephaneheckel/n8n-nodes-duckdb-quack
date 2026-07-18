@@ -26,25 +26,38 @@ The `n8n-nodes-duckdb-quack` repository is a community-built custom node for the
 
 | Platform | n8n Installation | DuckDB Runtime |
 |----------|-----------------|----------------|
-| Hostinger | Coolify (n8n standard image) | Docker container `docker-compose.yml` |
-| Windows 11 | npm (local installation) | WSL2 (DuckDB CLI) |
-| Windows 11 | npm (local installation) | DuckDB 1.5.4 |
+| Hostinger | Coolify (n8n standard image) | memory, physical, quack on Docker container `docker-compose.yml` |
+| Windows 11 | npm (local installation) | memory, physical, quack on WSL2 |
+| Windows 11 | npm (local installation) | memory, physical, quack on DuckDB 1.5.4 |
 
 > **Strongly recommended:** Unix machine (Linux/macOS). Windows is supported but native module upgrades are fragile as Windows locks loaded native DLLs 
 
-## Installation
+## Environment - Prerequisites
 
-> **⚠️ Work in Progress** — this community node is provided "as is." APIs, features, and behavior may change. We welcome feedback and contributions.
-
-1. Install the node via n8n menu **Settings → Community Nodes** → enter `n8n-nodes-duckdb-quack`
-
-## Environment
-
-- Requires DuckDB ≥ v1.5.4. 
+- Quack requires DuckDB ≥ v1.5.4. 
 - The `@duckdb/node-api` native module requires glibc. The Debian-based n8n is required (not Alpine/musl). However, the node has been successfully tested on standard n8n installation.
    ```yaml
    image: docker.n8n.io/n8nio/n8n:latest-debian
    ```
+
+
+## Architecture
+
+### Connection Model
+
+| Mode | DuckDB Instance | Caching |
+|------|----------------|---------|
+| Local `:memory:` | Single shared instance per n8n process | ✅ Keyed by path |
+| Local file | Instance per file path | ✅ Keyed by path |
+| Remote Quack | `:memory:` instance per server host | ✅ Keyed by host |
+
+Extensions are loaded once per instance and cached — subsequent executions skip the load step.
+
+## Node Installation
+
+> **⚠️ Work in Progress** — this community node is provided "as is." APIs, features, and behavior may change. We welcome feedback and contributions.
+
+1. Install the node via n8n's menu **Settings → Community Nodes** → enter `n8n-nodes-duckdb-quack`
 
 ## Credentials
 
@@ -93,6 +106,17 @@ Remote write operations use batch SQL INSERT to avoid appender chunk limits over
 | Stateless Quack Query | Single round-trip query bypassing ATTACH | — | ✅ |
 | Persist Memory to Disk | Save in-memory database to a `.db` file | ✅ | — |
 
+**Remote Query Strategy**
+
+The node uses two approaches for remote Quack queries:
+
+| Approach | Used For | Why |
+|----------|----------|-----|
+| `quack_query()` | Reads (List, Read, Select, Stateless) | Single round-trip, no streaming conflicts |
+| `ATTACH` + session | Writes, Persist | Needs multi-statement sessions |
+
+This avoids the "Multiple streaming scans" Quack protocol limitation.
+
 ### Server Resource
 
 | Operation | Description | Local | Remote |
@@ -102,13 +126,13 @@ Remote write operations use batch SQL INSERT to avoid appender chunk limits over
 
 ## Usage Examples
 
-### Local In-Memory
+### Local In-Memory & physical .db
 
-1. Create a credential: Connection Mode = `Local`, File Path = `:memory:`
-2. Populate data with **Table → Write** (Overwrite mode, table name `employees`)
+1. Create a credential: Connection Mode = `Memory`, File Path = `:memory:`
+2. Reuse `scipts\generate_items.md` in a code node and populate data with **Table → Write** (Overwrite mode, table name `employees`)
 3. Query with **Table → Read** or **Query → Select (Custom SQL)** (`SELECT * FROM employees WHERE score > 90`)
-4. Save with **Query → Persist Memory to Disk** → `/shared/my_backup.db`
-5. Create a new credential pointing to `/shared/my_backup.db` — the data is immediately available
+4. Save with **Query → Persist Memory to Disk** → `/shared/employee.db`
+5. Create a new credential pointing to `/shared/employee.db` — the data is immediately available
 
 Multiple credentials with `:memory:` share the same database instance, just like multiple credentials pointing to the same file.
 
@@ -202,9 +226,9 @@ Use `/shared/` as the base path for all file operations:
 
 | Operation | Field | Example |
 |-----------|-------|---------|
-| Persist Memory to Disk | Target Disk Path | `/shared/my_backup.db` |
-| Read Table (Parquet/CSV) | File Path | `/shared/export.parquet` |
-| Select (Custom SQL) | File Path | `/shared/query_result.csv` |
+| Persist Memory to Disk | Target Disk Path | `/shared/employee.db` |
+| Read Table (Parquet/CSV) | File Path | `/shared/employee.parquet` |
+| Select (Custom SQL) | File Path | `/shared/employee.csv` |
 
 
 | Path in SQL | Physical location | Survives redeploy? |
@@ -237,29 +261,6 @@ docker stats duckdb-quack-server
 3. The file is created as a fully functional DuckDB database — all tables are copied with their original types
 4. The `.db` file is immediately unlocked after the operation completes and can be opened by other processes
 5. Create a new Local credential pointing to that file to access it later
-
-## Architecture
-
-### Connection Model
-
-| Mode | DuckDB Instance | Caching |
-|------|----------------|---------|
-| Local `:memory:` | Single shared instance per n8n process | ✅ Keyed by path |
-| Local file | Instance per file path | ✅ Keyed by path |
-| Remote Quack | `:memory:` instance per server host | ✅ Keyed by host |
-
-Extensions are loaded once per instance and cached — subsequent executions skip the load step.
-
-### Remote Query Strategy
-
-The node uses two approaches for remote Quack queries:
-
-| Approach | Used For | Why |
-|----------|----------|-----|
-| `quack_query()` | Reads (List, Read, Select, Stateless) | Single round-trip, no streaming conflicts |
-| `ATTACH` + session | Writes, Persist | Needs multi-statement sessions |
-
-This avoids the "Multiple streaming scans" Quack protocol limitation.
 
 ## Features
 
