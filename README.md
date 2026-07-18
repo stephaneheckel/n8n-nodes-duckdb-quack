@@ -135,7 +135,9 @@ This avoids the "Multiple streaming scans" Quack protocol limitation.
 
 Multiple credentials with `:memory:` share the same database instance, just like multiple credentials pointing to the same file.
 
-### Remote Quack Server
+## Remote Quack Server
+
+💡 Quick Evaluation Note: You do not need to set up or configure a Quack server to use this node. You can easily test and fully evaluate its capabilities using only DuckDB in-memory or on-disk modes locally.
 
 **Option 1: WSL2 (recommended for Windows development)**
 
@@ -254,6 +256,8 @@ To check live resource usage:
 docker stats duckdb-quack-server
 ```
 
+## Node's specific features / operations
+
 ### Persist Memory to File
 
 1. Build data in `:memory:` with Write operations
@@ -261,8 +265,6 @@ docker stats duckdb-quack-server
 3. The file is created as a fully functional DuckDB database — all tables are copied with their original types
 4. The `.db` file is immediately unlocked after the operation completes and can be opened by other processes
 5. Create a new Local credential pointing to that file to access it later
-
-## Features
 
 ### Write Mode: Column Types
 
@@ -277,7 +279,7 @@ Auto-Detect uses `CREATE OR REPLACE TABLE ... AS SELECT * FROM (VALUES ...)` for
 
 ### Multi-Statement SQL
 
-The **Select (Custom SQL)** operation supports multi-statement blocks — DDL, DML, and PRAGMA execute before the final SELECT:
+The **Select (Custom SQL)** operation supports multi-statement blocks — DDL, DML, ...
 
 ```sql
 DROP TABLE IF EXISTS employees;
@@ -286,7 +288,7 @@ INSERT INTO employees VALUES (1, 'Alice'), (2, 'Bob');
 SELECT * FROM employees ORDER BY id;
 ```
 
-Intermediate statement failures (e.g., index already exists) are displayed in the console.
+Intermediate statement failures (e.g., index already exists) are displayed in the log (console).
 
 ### Extension Loading
 
