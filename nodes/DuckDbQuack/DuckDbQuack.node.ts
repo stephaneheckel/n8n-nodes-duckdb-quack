@@ -1214,27 +1214,41 @@ export class DuckDbQuack implements INodeType {
               .split(";")
               .map((s) => s.trim())
               .filter((s) => s.length > 0);
-            for (let i = 0; i < statements.length - 1; i++) {
-              try {
-                await connection.run(`${statements[i]};`);
-              } catch (_s) {
-                this.logger.warn(
-                  `Multi-statement SQL: intermediate statement failed (statement ${i + 1}/${statements.length - 1}): ${(statements[i] || "").substring(0, 80)}`,
-                  { error: (_s as Error).message },
-                );
-              }
-            }
             const lastSql =
               statements.length > 0
                 ? `${statements[statements.length - 1]};`
                 : sql;
-            const result = await connection.runAndReadAll(lastSql);
-            const rows = result.getRowObjectsJson();
-            for (const row of rows) {
-              returnData.push({
-                json: row as unknown as IDataObject,
-                pairedItem: { item: 0 },
-              });
+
+            // Single-statement remote query: use quack_query to avoid
+            // stale ATTACH handles (critical for WSL2 networking).
+            if (isRemote && statements.length <= 1) {
+              const rows = await runRemoteQuery(credentials, lastSql);
+              for (const row of rows) {
+                returnData.push({
+                  json: row as unknown as IDataObject,
+                  pairedItem: { item: 0 },
+                });
+              }
+            } else {
+              // Multi-statement or local: use ATTACH-based connection
+              for (let i = 0; i < statements.length - 1; i++) {
+                try {
+                  await connection.run(`${statements[i]};`);
+                } catch (_s) {
+                  this.logger.warn(
+                    `Multi-statement SQL: intermediate statement failed (statement ${i + 1}/${statements.length - 1}): ${(statements[i] || "").substring(0, 80)}`,
+                    { error: (_s as Error).message },
+                  );
+                }
+              }
+              const result = await connection.runAndReadAll(lastSql);
+              const rows = result.getRowObjectsJson();
+              for (const row of rows) {
+                returnData.push({
+                  json: row as unknown as IDataObject,
+                  pairedItem: { item: 0 },
+                });
+              }
             }
           }
         } else if (op === "stateless") {
