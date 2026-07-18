@@ -1102,31 +1102,38 @@ export class DuckDbQuack implements INodeType {
           await connection.run(
             `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`,
           );
-          const tablesResult = await connection.runAndReadAll(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
-          );
-          const tables = tablesResult.getRowObjectsJson();
-          let copied = 0;
-          for (const t of tables) {
-            const name = t.table_name as string;
-            await connection.run(
-              `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM main.${name};`,
+          try {
+            const tablesResult = await connection.runAndReadAll(
+              "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
             );
-            copied++;
+            const tables = tablesResult.getRowObjectsJson();
+            let copied = 0;
+            for (const t of tables) {
+              const name = t.table_name as string;
+              await connection.run(
+                `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM main.${name};`,
+              );
+              copied++;
+            }
+            returnData.push({
+              json: {
+                success: copied > 0,
+                message:
+                  copied > 0
+                    ? `Saved ${copied} tables to ${dest}`
+                    : `No tables found in memory — nothing to persist`,
+              } as unknown as IDataObject,
+              pairedItem: { item: 0 },
+            });
+          } finally {
+            try {
+              await connection.run(`DETACH disk_db;`);
+            } catch (_e) {
+              /* ignore detach errors */
+            }
+            // Evict stale cache entry so next access gets fresh data
+            instanceCache.delete(dest);
           }
-          await connection.run(`DETACH disk_db;`);
-          // Evict stale cache entry so next access gets fresh data and releases file lock
-          instanceCache.delete(dest);
-          returnData.push({
-            json: {
-              success: copied > 0,
-              message:
-                copied > 0
-                  ? `Saved ${copied} tables to ${dest}`
-                  : `No tables found in memory — nothing to persist`,
-            } as unknown as IDataObject,
-            pairedItem: { item: 0 },
-          });
         } else if (op === "select") {
           const sql = this.getNodeParameter("sqlQuery", 0) as string;
           const format = this.getNodeParameter(
