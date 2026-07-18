@@ -143,29 +143,35 @@ Multiple credentials with `:memory:` share the same database instance, just like
 
 **Option 1: WSL2 (recommended for Windows development)**
 
-The repository includes a convenience script to start a Quack server inside WSL2 with a sample `products` table.
-
-1. Copy the script into your WSL home:
+1. From a WSL2 terminal, start DuckDB:
    ```bash
-   cp /mnt/c/Users/steph/n8n-nodes-duckdb-quack/scripts/start_quack_wsl.sh ~/
-   chmod +x ~/start_quack_wsl.sh
+   export PATH="$HOME/.duckdb/cli/latest:$PATH"
+   duckdb
    ```
 
-2. Run it from WSL:
-   ```bash
-   ./start_quack_wsl.sh
+2. In the DuckDB shell, start the Quack server:
+   ```sql
+   INSTALL quack;
+   LOAD quack;
+   CREATE TABLE IF NOT EXISTS products AS SELECT * FROM (VALUES (1, 'Widget', 9.99), (2, 'Gadget', 24.50), (3, 'Thing', 3.75)) t(id, name, price);
+   CALL quack_serve('quack:0.0.0.0:9494', token='test', allow_other_hostname:=true);
    ```
 
-   The script installs the Quack extension, creates a sample `products` table, and starts the server on port 9494. It prints the WSL IP at startup.
+   The DuckDB session stays alive — you can keep typing SQL while the Quack server runs in the background.
 
-3. In n8n, create a Remote Quack credential:
-   - **Remote Server URI:** `quack:<wsl-ip>:9494` (use the IP shown by the script)
+3. Find your WSL IP:
+   ```bash
+   hostname -I | awk '{print $1}'
+   ```
+
+4. In n8n, create a Remote Quack credential:
+   - **Remote Server URI:** `quack:<wsl-ip>:9494` (e.g., `quack:172.30.87.150:9494`)
    - **Token:** `test`
    - **Disable SSL Encryption:** checked
 
-> **⚠️ `localhost` may not work:** WSL2 localhost forwarding is unreliable. If `quack:localhost:9494` fails, use the WSL2 IP address printed by the script (e.g., `quack:172.30.87.150:9494`).
+> **⚠️ Use the WSL IP, not `localhost`:** WSL2 localhost forwarding is unreliable and adds latency. Always use the WSL IP address directly.
 
-> **⚠️ "As is" script:** `start_quack_wsl.sh` is provided as a development convenience. It has been tested on Windows 11 with WSL2 and DuckDB CLI v1.5.4. No other configurations have been evaluated.
+> `start_quack_wsl.sh` is also included in the repo as a template, but the interactive approach above is more reliable.
 
 **Option 2: Windows (DuckDB CLI)**
 
