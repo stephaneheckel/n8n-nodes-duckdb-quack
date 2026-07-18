@@ -143,20 +143,29 @@ Multiple credentials with `:memory:` share the same database instance, just like
 
 **Option 1: WSL2 (recommended for Windows development)**
 
-1. In a WSL2 terminal, install DuckDB CLI:
+The repository includes a convenience script to start a Quack server inside WSL2 with a sample `products` table.
+
+1. Copy the script into your WSL home:
    ```bash
-   curl https://install.duckdb.org | sh
-   export PATH="$HOME/.duckdb/cli/latest:$PATH"
+   cp /mnt/c/Users/steph/n8n-nodes-duckdb-quack/scripts/start_quack_wsl.sh ~/
+   chmod +x ~/start_quack_wsl.sh
    ```
-2. Start the server:
-   ```sql
-   duckdb
-   INSTALL quack;
-   LOAD quack;
-   CREATE TABLE products AS SELECT * FROM (VALUES (1, 'Widget', 9.99), (2, 'Gadget', 24.50)) t(id, name, price);
-   CALL quack_serve('quack:0.0.0.0:9494', token='my_token', allow_other_hostname:=true);
+
+2. Run it from WSL:
+   ```bash
+   ./start_quack_wsl.sh
    ```
-3. WSL2 auto-forwards `localhost` — use `quack:localhost:9494` in n8n with Disable SSL checked
+
+   The script installs the Quack extension, creates a sample `products` table, and starts the server on port 9494. It prints the WSL IP at startup.
+
+3. In n8n, create a Remote Quack credential:
+   - **Remote Server URI:** `quack:<wsl-ip>:9494` (use the IP shown by the script)
+   - **Token:** `test`
+   - **Disable SSL Encryption:** checked
+
+> **⚠️ `localhost` may not work:** WSL2 localhost forwarding is unreliable. If `quack:localhost:9494` fails, use the WSL2 IP address printed by the script (e.g., `quack:172.30.87.150:9494`).
+
+> **⚠️ "As is" script:** `start_quack_wsl.sh` is provided as a development convenience. It has been tested on Windows 11 with WSL2 and DuckDB CLI v1.5.4. No other configurations have been evaluated.
 
 **Option 2: Windows (DuckDB CLI)**
 
