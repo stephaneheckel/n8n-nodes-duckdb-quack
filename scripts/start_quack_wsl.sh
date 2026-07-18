@@ -41,7 +41,11 @@ echo "  URI:  quack:localhost:9494"
 echo "  Token: test"
 echo "  Disable SSL: checked"
 echo ""
-echo "(WSL2 auto-forwards localhost)"
+echo "n8n credential (try localhost first; use IP if localhost fails):"
+WSL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+echo "  URI:  quack:$WSL_IP:9494"
+echo "  (or quack:localhost:9494 if WSL2 forwarding is active)"
+echo ""
 echo "Press Ctrl+C to stop."
 echo ""
 
