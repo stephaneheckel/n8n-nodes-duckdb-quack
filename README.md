@@ -165,7 +165,7 @@ Multiple credentials with `:memory:` share the same database instance, just like
    ```
 
 4. In n8n, create a Remote Quack credential:
-   - **Remote Server URI:** `quack:<wsl-ip>:9494` (e.g., `quack:172.30.87.150:9494`)
+   - **Remote Server URI:** `quack:<wsl-ip>:9494` (e.g., `quack:172.20.10.5:9494`)
    - **Token:** `test`
    - **Disable SSL Encryption:** checked
 
