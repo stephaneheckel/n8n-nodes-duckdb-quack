@@ -308,6 +308,8 @@ SELECT * FROM employees ORDER BY id;
 
 Intermediate statement failures (e.g., index already exists) are displayed in the log (console).
 
+> **⚠️ Statement splitting:** multi-statement blocks are split on `;` characters. Avoid semicolons inside string literals (`'a;b'`) or comments (`-- notes;`).
+
 ### Extension Loading
 
 Core extension `httpfs` loads automatically. Additional extensions via comma-separated list: `spatial, fts, sqlite_scanner`. Community repo syntax: `gsheets FROM community`. DuckDB's JIT autoload is enabled by default.
