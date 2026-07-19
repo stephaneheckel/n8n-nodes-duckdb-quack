@@ -1107,8 +1107,6 @@ export class DuckDbQuack implements INodeType {
             }
           }
 
-          // For remote, tables live in target_db.main; for local, in main.
-          const sourceSchema = isRemote ? "target_db.main" : "main";
 
           await connection.run(
             `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`,
@@ -1146,14 +1144,37 @@ export class DuckDbQuack implements INodeType {
                 } as unknown as IDataObject,
                 pairedItem: { item: 0 },
               });
-            } else {
+            } else if (isRemote) {
+              // Remote persist: Quack ATTACH prohibits CTAS/INSERT from
+              // streaming sources. Use quack_query (stateless) to fetch
+              // data, then INSERT locally into disk_db.
               const copyConn = await instance.connect();
               try {
                 let copied = 0;
                 for (const name of tableNames) {
-                  await copyConn.run(
-                    `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM ${sourceSchema}.${name};`,
+                  const rows = await runRemoteQuery(
+                    credentials,
+                    `SELECT * FROM ${name};`,
                   );
+                  if (rows.length === 0) continue;
+                  const cols = Object.keys(rows[0]);
+                  const colDefs = cols.map((c) => `${c} VARCHAR`).join(", ");
+                  await copyConn.run(
+                    `CREATE TABLE IF NOT EXISTS disk_db.main.${name} (${colDefs});`,
+                  );
+                  const valueRows = rows.map((row) => {
+                    const vals = cols.map((col) => {
+                      const val = row[col];
+                      if (val === null || val === undefined) return "NULL";
+                      return `'${String(val).replace(/'/g, "''")}'`;
+                    });
+                    return `(${vals.join(", ")})`;
+                  });
+                  if (valueRows.length > 0) {
+                    await copyConn.run(
+                      `INSERT INTO disk_db.main.${name} (${cols.join(", ")}) VALUES ${valueRows.join(", ")};`,
+                    );
+                  }
                   copied++;
                 }
                 returnData.push({
@@ -1166,6 +1187,25 @@ export class DuckDbQuack implements INodeType {
               } finally {
                 copyConn.closeSync();
               }
+            } else {
+              // Local persist: CTAS works natively
+              let copied = 0;
+              for (const name of tableNames) {
+                await connection.run(
+                  `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM main.${name};`,
+                );
+                copied++;
+              }
+              returnData.push({
+                json: {
+                  success: copied > 0,
+                  message:
+                    copied > 0
+                      ? `Saved ${copied} tables to ${dest}`
+                      : `No tables found in memory — nothing to persist`,
+                } as unknown as IDataObject,
+                pairedItem: { item: 0 },
+              });
             }
           } finally {
             try {
