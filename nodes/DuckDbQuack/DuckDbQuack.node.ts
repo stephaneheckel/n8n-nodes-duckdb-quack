@@ -1114,15 +1114,29 @@ export class DuckDbQuack implements INodeType {
             `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`,
           );
           try {
-            const tablesResult = await connection.runAndReadAll(
-              isRemote
-                ? "SELECT name AS table_name FROM (SHOW ALL TABLES) WHERE database = 'target_db';"
-                : "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
-            );
-            const tables = tablesResult.getRowObjectsJson();
+            // Fetch table list first to avoid streaming-scan + CTAS conflict
+            let tableNames: string[] = [];
+            if (isRemote) {
+              const allTables = (
+                await connection.runAndReadAll("SHOW ALL TABLES;")
+              ).getRowObjectsJson();
+              tableNames = allTables
+                .filter(
+                  (t: Record<string, unknown>) => t.database === "target_db",
+                )
+                .map((t: Record<string, unknown>) => t.name as string);
+            } else {
+              const localTables = (
+                await connection.runAndReadAll(
+                  "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
+                )
+              ).getRowObjectsJson();
+              tableNames = localTables.map(
+                (t: Record<string, unknown>) => t.table_name as string,
+              );
+            }
             let copied = 0;
-            for (const t of tables) {
-              const name = t.table_name as string;
+            for (const name of tableNames) {
               await connection.run(
                 `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM ${sourceSchema}.${name};`,
               );
