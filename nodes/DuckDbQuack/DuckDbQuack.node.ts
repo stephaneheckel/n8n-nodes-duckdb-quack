@@ -1109,87 +1109,57 @@ export class DuckDbQuack implements INodeType {
           }
 
 
-          await connection.run(
-            `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`,
-          );
-          try {
-            let tableNames: string[] = [];
-            if (isRemote) {
-              // No ATTACH for persist — enumerate via quack_query
-              const allTables = await runRemoteQuery(
-                credentials,
-                "SHOW ALL TABLES;",
-              );
-              tableNames = allTables.map(
-                (t: Record<string, unknown>) => t.name as string,
-              );
-            } else {
-              const localTables = (
-                await connection.runAndReadAll(
-                  "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
-                )
-              ).getRowObjectsJson();
-              tableNames = localTables.map(
-                (t: Record<string, unknown>) => t.table_name as string,
-              );
-            }
+          let tableNames: string[] = [];
+          if (isRemote) {
+            // No ATTACH for persist — enumerate via quack_query
+            const allTables = await runRemoteQuery(
+              credentials,
+              "SHOW ALL TABLES;",
+            );
+            tableNames = allTables.map(
+              (t: Record<string, unknown>) => t.name as string,
+            );
+          } else {
+            const localTables = (
+              await connection.runAndReadAll(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
+              )
+            ).getRowObjectsJson();
+            tableNames = localTables.map(
+              (t: Record<string, unknown>) => t.table_name as string,
+            );
+          }
 
-            if (tableNames.length === 0) {
-              returnData.push({
-                json: {
-                  success: false,
-                  message: "No tables found — nothing to persist",
-                } as unknown as IDataObject,
-                pairedItem: { item: 0 },
-              });
-            } else if (isRemote) {
-              // Remote persist: Quack ATTACH prohibits CTAS/INSERT from
-              // streaming sources. Use quack_query (stateless) to fetch
-              // data, then INSERT locally into disk_db.
-              const copyConn = await instance.connect();
-              try {
-                let copied = 0;
-                const copiedTables: string[] = [];
-                for (const name of tableNames) {
-                  const rows = await runRemoteQuery(
-                    credentials,
-                    `SELECT * FROM ${name};`,
-                  );
-                  if (rows.length === 0) continue;
-                  const cols = Object.keys(rows[0]);
-                  const colDefs = cols.map((c) => `${c} VARCHAR`).join(", ");
-                  await copyConn.run(
-                    `CREATE TABLE IF NOT EXISTS disk_db.main.${name} (${colDefs});`,
-                  );
-                  const valueRows = rows.map((row) => {
-                    const vals = cols.map((col) => {
-                      const val = row[col];
-                      if (val === null || val === undefined) return "NULL";
-                      return `'${String(val).replace(/'/g, "''")}'`;
-                    });
-                    return `(${vals.join(", ")})`;
-                  });
-                  if (valueRows.length > 0) {
-                    await copyConn.run(
-                      `INSERT INTO disk_db.main.${name} (${cols.join(", ")}) VALUES ${valueRows.join(", ")};`,
-                    );
-                  }
-                  copied++;
-                  copiedTables.push(name);
-                }
-                returnData.push({
-                  json: {
-                    success: true,
-                    message: `Saved ${copied} tables to ${dest}`,
-                    tables: copiedTables,
-                  } as unknown as IDataObject,
-                  pairedItem: { item: 0 },
-                });
-              } finally {
-                copyConn.closeSync();
-              }
-            } else {
-              // Local persist: CTAS works natively
+          if (tableNames.length === 0) {
+            returnData.push({
+              json: {
+                success: false,
+                message: "No tables found — nothing to persist",
+              } as unknown as IDataObject,
+              pairedItem: { item: 0 },
+            });
+          } else if (isRemote) {
+            // Remote persist: run entirely server-side via quack_query.
+            let sql = `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`;
+            for (const name of tableNames) {
+              sql += `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM ${name};`;
+            }
+            sql += `DETACH disk_db;`;
+            await runRemoteQuery(credentials, sql);
+            returnData.push({
+              json: {
+                success: true,
+                message: `Saved ${tableNames.length} tables to ${dest}`,
+                tables: tableNames,
+              } as unknown as IDataObject,
+              pairedItem: { item: 0 },
+            });
+          } else {
+            // Local persist: ATTACH disk_db and CTAS natively
+            await connection.run(
+              `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`,
+            );
+            try {
               let copied = 0;
               const copiedTables: string[] = [];
               for (const name of tableNames) {
@@ -1210,14 +1180,14 @@ export class DuckDbQuack implements INodeType {
                 } as unknown as IDataObject,
                 pairedItem: { item: 0 },
               });
+            } finally {
+              try {
+                await connection.run(`DETACH disk_db;`);
+              } catch (_e) {
+                /* ignore */
+              }
+              instanceCache.delete(dest);
             }
-          } finally {
-            try {
-              await connection.run(`DETACH disk_db;`);
-            } catch (_e) {
-              /* ignore */
-            }
-            instanceCache.delete(dest);
           }
         } else if (op === "select") {
           const sql = this.getNodeParameter("sqlQuery", 0) as string;
