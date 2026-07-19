@@ -1163,6 +1163,9 @@ export class DuckDbQuack implements INodeType {
             const createKeyword = overwrite ? "CREATE OR REPLACE" : "CREATE TABLE IF NOT EXISTS";
             let sql = `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db; `;
             for (const name of tableNames) {
+              if (overwrite) {
+                sql += `DROP TABLE IF EXISTS disk_db.main.${name}; `;
+              }
               sql += `${createKeyword} disk_db.main.${name} AS SELECT * FROM ${name}; `;
             }
             sql += `DETACH disk_db;`;
