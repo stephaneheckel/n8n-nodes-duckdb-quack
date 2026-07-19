@@ -1149,6 +1149,7 @@ export class DuckDbQuack implements INodeType {
               const copyConn = await instance.connect();
               try {
                 let copied = 0;
+                const copiedTables: string[] = [];
                 for (const name of tableNames) {
                   const rows = await runRemoteQuery(
                     credentials,
@@ -1174,11 +1175,13 @@ export class DuckDbQuack implements INodeType {
                     );
                   }
                   copied++;
+                  copiedTables.push(name);
                 }
                 returnData.push({
                   json: {
                     success: true,
                     message: `Saved ${copied} tables to ${dest}`,
+                    tables: copiedTables,
                   } as unknown as IDataObject,
                   pairedItem: { item: 0 },
                 });
@@ -1188,15 +1191,18 @@ export class DuckDbQuack implements INodeType {
             } else {
               // Local persist: CTAS works natively
               let copied = 0;
+              const copiedTables: string[] = [];
               for (const name of tableNames) {
                 await connection.run(
                   `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM main.${name};`,
                 );
                 copied++;
+                copiedTables.push(name);
               }
               returnData.push({
                 json: {
                   success: copied > 0,
+                  tables: copiedTables,
                   message:
                     copied > 0
                       ? `Saved ${copied} tables to ${dest}`
