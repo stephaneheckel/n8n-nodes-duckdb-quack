@@ -1116,7 +1116,7 @@ export class DuckDbQuack implements INodeType {
           try {
             const tablesResult = await connection.runAndReadAll(
               isRemote
-                ? "SELECT table_name FROM target_db.information_schema.tables WHERE table_schema='main';"
+                ? "SELECT name AS table_name FROM (SHOW ALL TABLES) WHERE database = 'target_db';"
                 : "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
             );
             const tables = tablesResult.getRowObjectsJson();
