@@ -561,7 +561,7 @@ export class DuckDbQuack implements INodeType {
           show: { resource: ["query"], operation: ["persist"] },
         },
         default: false,
-        description: "Whether to overwrite if the target file already exists (local persist only)",
+        description: "Whether to overwrite if the target file already exists",
       },
     ],
   };
@@ -1094,10 +1094,11 @@ export class DuckDbQuack implements INodeType {
             0,
           ) as boolean;
 
-          if (fs.existsSync(dest)) {
+          // Client-side file check: only valid for local connections where
+          // n8n and the DuckDB instance share the same filesystem.
+          if (!isRemote && fs.existsSync(dest)) {
             if (overwrite) {
               fs.unlinkSync(dest);
-              // Clear cached instance so next read gets fresh data
               instanceCache.delete(dest);
             } else {
               throw new NodeOperationError(
@@ -1141,8 +1142,9 @@ export class DuckDbQuack implements INodeType {
           } else if (isRemote) {
             // Remote persist: run entirely server-side via quack_query.
             let sql = `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`;
+            const createKeyword = overwrite ? "CREATE OR REPLACE" : "CREATE TABLE IF NOT EXISTS";
             for (const name of tableNames) {
-              sql += `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM ${name};`;
+              sql += `${createKeyword} disk_db.main.${name} AS SELECT * FROM ${name};`;
             }
             sql += `DETACH disk_db;`;
             await runRemoteQuery(credentials, sql);
