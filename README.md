@@ -108,7 +108,7 @@ Remote write operations use batch SQL INSERT to avoid appender chunk limits over
 |-----------|-------------|-------|--------|
 | Select (Custom SQL) | Execute arbitrary SQL queries | ✅ | ✅ |
 | Stateless Quack Query | Single round-trip query bypassing ATTACH | — | ✅ |
-| Persist Memory to Disk | Save in-memory database to a `.db` file | ✅ | — |
+| Persist Memory to Disk | Save in-memory or remote database to a `.db` file | ✅ | ✅ |
 
 **Remote Query Strategy**
 
