@@ -142,7 +142,7 @@ Multiple credentials with `:memory:` share the same database instance, just like
 
 💡 Quick Evaluation Note: You do not need to set up or configure a Quack server to use this node. You can easily test and fully evaluate its capabilities using only DuckDB in-memory or on-disk modes locally.
 
-### This node has been tested on the following configurations:
+This node has been tested on the following configurations:
 
 |   |Platform | Quack |
 |---|--------------------|------------------------------------------|
@@ -150,7 +150,7 @@ Multiple credentials with `:memory:` share the same database instance, just like
 | 2 | Windows 11 | Quack on WSL2 accessed by n8n on Windows (same machine) |
 | 3 | Windows 11 | Quack on Windows accessed by n8n on Windows (same machine) |
 
-**Option 1: Quack on a VPS/Unix accessed by n8n on the same VPS (2 containers)**
+### Option 1: Quack on a VPS/Unix accessed by n8n on the same VPS (2 containers)
 
 The repository includes a self-contained `docker-compose.yml` that starts a persistent Quack server with automatic `.db` file discovery.
 
@@ -161,7 +161,7 @@ The repository includes a self-contained `docker-compose.yml` that starts a pers
    - **Authentication Token:** the value of `QUACK_TOKEN` 
    - **Disable SSL Encryption:** check this (direct HTTP/2, no TLS)
 
-### Shared Directory Between n8n and DuckDB Containers
+#### Shared Directory Between n8n and DuckDB Containers
 
 If n8n and the DuckDB Quack server run on the same host (separate Docker containers), use a shared bind mount so both containers access the same `.db` files. The n8n node writes persist/export files, and the DuckDB server can `ATTACH` them — both see the same directory.
 
@@ -215,7 +215,7 @@ Use `/shared/` as the base path for all file operations:
 
 Any `.db` file in `/shared/` is listed in the server logs at startup.
 
-### Monitoring & Resource Limits
+#### Monitoring & Resource Limits
 
 The compose file includes sensible defaults:
 
@@ -231,7 +231,7 @@ To check live resource usage:
 docker stats duckdb-quack-server
 ```
 
-**Option 2: Quack on WSL2 accessed by n8n on Windows (same machine)**
+### Option 2: Quack on WSL2 accessed by n8n on Windows (same machine)
 
 1. Install DuckDB CLI in WSL2 and start it:
    ```bash
@@ -264,7 +264,7 @@ docker stats duckdb-quack-server
 
 > `start_quack_wsl.sh` is also included in the repo as an "as is" template for automated startup.
 
-**Option 3: Quack on Windows accessed by n8n on Windows (same machine)**
+### Option 3: Quack on Windows accessed by n8n on Windows (same machine)
 
 1. Install the DuckDB CLI:
    ```powershell
