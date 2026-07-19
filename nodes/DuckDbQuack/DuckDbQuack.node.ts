@@ -1143,10 +1143,9 @@ export class DuckDbQuack implements INodeType {
             // Remote persist: run entirely server-side via quack_query.
             // Pre-check: if overwrite is disabled, verify target file is empty.
             if (!overwrite) {
-              const alias = `_check_${Date.now()}`;
               const checkResult = await runRemoteQuery(
                 credentials,
-                `ATTACH '${dest.replace(/'/g, "''")}' AS ${alias}; SELECT count(*) AS cnt FROM ${alias}.information_schema.tables WHERE table_schema='main'; DETACH ${alias};`,
+                `SELECT count(*) AS cnt FROM glob('${dest.replace(/'/g, "''")}');`,
               );
               const cnt = Number(
                 (checkResult[0] as Record<string, unknown> | undefined)
@@ -1155,7 +1154,7 @@ export class DuckDbQuack implements INodeType {
               if (cnt > 0) {
                 throw new NodeOperationError(
                   this.getNode(),
-                  `Target file already contains ${cnt} table(s): ${dest}. Enable "Force Overwrite" to replace them.`,
+                  `Target file already exists: ${dest}. Enable "Force Overwrite" to replace it.`,
                   { itemIndex: 0 },
                 );
               }
