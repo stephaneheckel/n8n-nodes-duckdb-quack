@@ -549,9 +549,9 @@ export class DuckDbQuack implements INodeType {
         },
         default: "",
         required: true,
-        placeholder: "/home/user/my_data.db",
+        placeholder: "/shared/backup.db",
         description:
-          "Path to the .db file to create. All in-memory tables will be copied to this file.",
+          "Path to the .db file to create. For remote Quack connections, this path is resolved on the server — use the server's filesystem path (e.g., /shared/backup.db on Unix, /home/steph/shared-duckdb/backup.db on WSL2).",
       },
       {
         displayName: "Force Overwrite",
@@ -561,7 +561,7 @@ export class DuckDbQuack implements INodeType {
           show: { resource: ["query"], operation: ["persist"] },
         },
         default: false,
-        description: "Whether to overwrite if the target file already exists",
+        description: "Whether to overwrite if the target file already exists (local persist only)",
       },
     ],
   };
