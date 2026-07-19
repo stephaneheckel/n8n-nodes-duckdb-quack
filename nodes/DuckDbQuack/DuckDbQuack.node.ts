@@ -1145,7 +1145,7 @@ export class DuckDbQuack implements INodeType {
             if (!overwrite) {
               const checkResult = await runRemoteQuery(
                 credentials,
-                `ATTACH '${dest.replace(/'/g, "''")}' AS _preflight; SELECT count(*) AS cnt FROM information_schema.tables WHERE table_schema='main'; DETACH _preflight;`,
+                `ATTACH '${dest.replace(/'/g, "''")}' AS _preflight; SELECT count(*) AS cnt FROM _preflight.information_schema.tables WHERE table_schema='main'; DETACH _preflight;`,
               );
               const cnt = Number(
                 (checkResult[0] as Record<string, unknown> | undefined)
