@@ -297,6 +297,19 @@ docker stats duckdb-quack-server
 
 > Persist copies only tables from the default `main` schema. Custom schemas are not supported — all Write operations create tables in `main`.
 
+#### Persist Architecture: Local vs Remote
+
+| | Local | Remote |
+|---|---|---|
+| DuckDB runs | Inside n8n process | Separate server |
+| Filesystem | Same as n8n | Server's filesystem |
+| Existence check | `fs.existsSync` (client) | `glob()` via `quack_query` (server) |
+| Persist | ATTACH + CTAS locally | ATTACH + CTAS via `quack_query` (server-side, zero data transfer) |
+
+For local connections, DuckDB runs in-process — same process as n8n, same filesystem. `fs.existsSync` and the DuckDB ATTACH both touch the same disk. No server/client split.
+
+For remote (Quack), the server is a different process (Docker container or WSL VM). Its filesystem is separate from n8n's. The entire persist operation runs server-side via a single `quack_query` call — ATTACH, CTAS per table, DETACH — with zero data transferred to the client. The target path resolves on the server's filesystem.
+
 ### Write Mode: Column Types
 
 Tables created by **Write / Append Rows** default to `VARCHAR`. When **Write Mode** is **Overwrite / Recreate**, a **Column Types** option appears:
