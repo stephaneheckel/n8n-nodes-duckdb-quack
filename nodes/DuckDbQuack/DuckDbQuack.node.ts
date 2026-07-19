@@ -1161,14 +1161,15 @@ export class DuckDbQuack implements INodeType {
             }
 
             const createKeyword = overwrite ? "CREATE TABLE" : "CREATE TABLE IF NOT EXISTS";
-            let sql = `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db; `;
+            const alias = `_persist_${Date.now()}`;
+            let sql = `ATTACH '${dest.replace(/'/g, "''")}' AS ${alias}; `;
             for (const name of tableNames) {
               if (overwrite) {
-                sql += `DROP TABLE IF EXISTS disk_db.main.${name}; `;
+                sql += `DROP TABLE IF EXISTS ${alias}.main.${name}; `;
               }
-              sql += `${createKeyword} disk_db.main.${name} AS SELECT * FROM ${name}; `;
+              sql += `${createKeyword} ${alias}.main.${name} AS SELECT * FROM ${name}; `;
             }
-            sql += `DETACH disk_db;`;
+            sql += `DETACH ${alias};`;
             await runRemoteQuery(credentials, sql);
             returnData.push({
               json: {
