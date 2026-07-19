@@ -142,59 +142,15 @@ Multiple credentials with `:memory:` share the same database instance, just like
 
 💡 Quick Evaluation Note: You do not need to set up or configure a Quack server to use this node. You can easily test and fully evaluate its capabilities using only DuckDB in-memory or on-disk modes locally.
 
-**Option 1: WSL2 (recommended for Windows development)**
+### This node has been tested on the following configurations:
 
-1. Install DuckDB CLI in WSL2 and start it:
-   ```bash
-   curl https://install.duckdb.org | sh
-   export PATH="$HOME/.duckdb/cli/latest:$PATH"
-   duckdb
-   ```
+|   |Platform | Quack |
+|---|--------------------|------------------------------------------|
+| 1 | VPS | Quack on Unix as a  `docker-compose.yml` accessed by n8n on the same VPS |
+| 2 | Windows 11 | Quack on WSL2 accessed by n8n on Windows (same machine) |
+| 3 | Windows 11 | Quack on Windows accessed by n8n on Windows (same machine) |
 
-2. In the DuckDB shell, start the Quack server:
-   ```sql
-   INSTALL quack;
-   LOAD quack;
-   CREATE TABLE IF NOT EXISTS products AS SELECT * FROM (VALUES (1, 'Widget', 9.99), (2, 'Gadget', 24.50), (3, 'Thing', 3.75)) t(id, name, price);
-   CALL quack_serve('quack:0.0.0.0:9494', token='test', allow_other_hostname:=true);
-   ```
-
-   The DuckDB session stays alive — you can keep typing SQL while the Quack server runs in the background.
-
-3. Find your WSL IP:
-   ```bash
-   hostname -I | awk '{print $1}'
-   ```
-
-4. In n8n, create a Remote Quack credential:
-   - **Remote Server URI:** `quack:<wsl-ip>:9494` (e.g., `quack:172.20.10.5:9494`)
-   - **Token:** `test`
-   - **Disable SSL Encryption:** checked
-
-> **⚠️ Use the WSL IP, not `localhost`:** WSL2 localhost forwarding is unreliable and adds latency. Always use the WSL IP address directly.
-
-> `start_quack_wsl.sh` is also included in the repo as an "as is" template for automated startup.
-
-**Option 2: Windows (DuckDB CLI)**
-
-1. Install the DuckDB CLI:
-   ```powershell
-   winget install DuckDB.cli
-   ```
-2. Start an interactive DuckDB session:
-   ```powershell
-   duckdb
-   ```
-3. In the DuckDB shell, start the Quack server:
-   ```sql
-   INSTALL quack;
-   LOAD quack;
-   CREATE TABLE products AS SELECT * FROM (VALUES (1, 'Widget', 9.99), (2, 'Gadget', 24.50)) t(id, name, price);
-   CALL quack_serve('quack:localhost:9494', token='my_token', allow_other_hostname:=true);
-   ```
-4. Keep the terminal open. In n8n, use credential `quack:localhost:9494` with Disable SSL checked and token `my_token`.
-
-**Option 3: Docker Compose (Tested via Coolify)**
+**Option 1: Quack on a VPS/Unix accessed by n8n on the same VPS (2 containers)**
 
 The repository includes a self-contained `docker-compose.yml` that starts a persistent Quack server with automatic `.db` file discovery.
 
@@ -209,7 +165,7 @@ The repository includes a self-contained `docker-compose.yml` that starts a pers
 
 If n8n and the DuckDB Quack server run on the same host (separate Docker containers), use a shared bind mount so both containers access the same `.db` files. The n8n node writes persist/export files, and the DuckDB server can `ATTACH` them — both see the same directory.
 
-**1. Create the shared directory on the host:**
+1. Create the shared directory on the host:
 
 ```bash
 sudo mkdir -p /data/shared-duckdb
@@ -219,7 +175,7 @@ sudo chmod 775 /data/shared-duckdb
 
 UID/GID `1000:1000` matches the `node` user in both the n8n and `node:20-slim` images.
 
-**2. Mount it in the n8n compose file:**
+2. Mount it in the n8n compose file:
 
 ```yaml
 services:
@@ -228,7 +184,7 @@ services:
       - '/data/shared-duckdb:/shared'
 ```
 
-**3. Mount it in the DuckDB compose file:**
+3. Mount it in the DuckDB compose file:
 
 ```yaml
 services:
@@ -241,7 +197,7 @@ services:
 
 The DuckDB compose file included in this repo uses `/shared` out of the box. The container also runs `chown -R node:node /shared` at startup to ensure the server process can write, then launches via `su node`.
 
-**4. In your n8n workflows:**
+4. In your n8n workflows:
 
 Use `/shared/` as the base path for all file operations:
 
@@ -274,6 +230,58 @@ To check live resource usage:
 ```bash
 docker stats duckdb-quack-server
 ```
+
+**Option 2: Quack on WSL2 accessed by n8n on Windows (same machine)**
+
+1. Install DuckDB CLI in WSL2 and start it:
+   ```bash
+   curl https://install.duckdb.org | sh
+   export PATH="$HOME/.duckdb/cli/latest:$PATH"
+   duckdb
+   ```
+
+2. In the DuckDB shell, start the Quack server:
+   ```sql
+   INSTALL quack;
+   LOAD quack;
+   CREATE TABLE IF NOT EXISTS products AS SELECT * FROM (VALUES (1, 'Widget', 9.99), (2, 'Gadget', 24.50), (3, 'Thing', 3.75)) t(id, name, price);
+   CALL quack_serve('quack:0.0.0.0:9494', token='test', allow_other_hostname:=true);
+   ```
+
+   The DuckDB session stays alive — you can keep typing SQL while the Quack server runs in the background.
+
+3. Find your WSL IP:
+   ```bash
+   hostname -I | awk '{print $1}'
+   ```
+
+4. In n8n, create a Remote Quack credential:
+   - **Remote Server URI:** `quack:<wsl-ip>:9494` (e.g., `quack:172.20.10.5:9494`)
+   - **Token:** `test`
+   - **Disable SSL Encryption:** checked
+
+> **⚠️ Use the WSL IP, not `localhost`:** WSL2 localhost forwarding is unreliable and adds latency. Always use the WSL IP address directly.
+
+> `start_quack_wsl.sh` is also included in the repo as an "as is" template for automated startup.
+
+**Option 3: Quack on Windows accessed by n8n on Windows (same machine)**
+
+1. Install the DuckDB CLI:
+   ```powershell
+   winget install DuckDB.cli
+   ```
+2. Start an interactive DuckDB session:
+   ```powershell
+   duckdb
+   ```
+3. In the DuckDB shell, start the Quack server:
+   ```sql
+   INSTALL quack;
+   LOAD quack;
+   CREATE TABLE products AS SELECT * FROM (VALUES (1, 'Widget', 9.99), (2, 'Gadget', 24.50)) t(id, name, price);
+   CALL quack_serve('quack:localhost:9494', token='my_token', allow_other_hostname:=true);
+   ```
+4. Keep the terminal open. In n8n, use credential `quack:localhost:9494` with Disable SSL checked and token `my_token`.
 
 ## Node's specific features / operations
 
