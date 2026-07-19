@@ -1113,12 +1113,15 @@ export class DuckDbQuack implements INodeType {
           await connection.run(
             `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`,
           );
+          // Use a separate connection for data operations: the Quack ATTACH
+          // on the main connection is treated as a streaming context, and
+          // CTAS fails with "Multiple streaming scans" if run on the same handle.
+          const copyConn = await instance.connect();
           try {
-            // Fetch table list first to avoid streaming-scan + CTAS conflict
             let tableNames: string[] = [];
             if (isRemote) {
               const allTables = (
-                await connection.runAndReadAll("SHOW ALL TABLES;")
+                await copyConn.runAndReadAll("SHOW ALL TABLES;")
               ).getRowObjectsJson();
               tableNames = allTables
                 .filter(
@@ -1127,7 +1130,7 @@ export class DuckDbQuack implements INodeType {
                 .map((t: Record<string, unknown>) => t.name as string);
             } else {
               const localTables = (
-                await connection.runAndReadAll(
+                await copyConn.runAndReadAll(
                   "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
                 )
               ).getRowObjectsJson();
@@ -1137,7 +1140,7 @@ export class DuckDbQuack implements INodeType {
             }
             let copied = 0;
             for (const name of tableNames) {
-              await connection.run(
+              await copyConn.run(
                 `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM ${sourceSchema}.${name};`,
               );
               copied++;
@@ -1153,6 +1156,11 @@ export class DuckDbQuack implements INodeType {
               pairedItem: { item: 0 },
             });
           } finally {
+            try {
+              copyConn.closeSync();
+            } catch (_e) {
+              /* ignore */
+            }
             try {
               await connection.run(`DETACH disk_db;`);
             } catch (_e) {
