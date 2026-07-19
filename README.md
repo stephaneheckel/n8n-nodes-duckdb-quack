@@ -144,11 +144,11 @@ Multiple credentials with `:memory:` share the same database instance, just like
 
 This node has been tested on the following configurations:
 
-|   |Platform | Quack |
+|   | Platform | Quack |
 |---|--------------------|------------------------------------------|
-| 1 | VPS | Quack on Unix as a  `docker-compose.yml` accessed by n8n on the same VPS |
-| 2 | Windows 11 | Quack on WSL2 accessed by n8n on Windows (same machine) |
-| 3 | Windows 11 | Quack on Windows accessed by n8n on Windows (same machine) |
+| 1 | VPS | [Quack on Unix](#option-1-quack-on-a-vpsunix-accessed-by-n8n-on-the-same-vps-2-containers) as a `docker-compose.yml` accessed by n8n on the same VPS |
+| 2 | Windows 11 | [Quack on WSL2](#option-2-quack-on-wsl2-accessed-by-n8n-on-windows-same-machine) accessed by n8n on Windows (same machine) |
+| 3 | Windows 11 | [Quack on Windows](#option-3-quack-on-windows-accessed-by-n8n-on-windows-same-machine) accessed by n8n on Windows (same machine) |
 
 ### Option 1: Quack on a VPS/Unix accessed by n8n on the same VPS (2 containers)
 
