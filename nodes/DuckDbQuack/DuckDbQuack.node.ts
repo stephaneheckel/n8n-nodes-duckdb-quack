@@ -1113,19 +1113,16 @@ export class DuckDbQuack implements INodeType {
             `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`,
           );
           try {
-            // Enumerate tables on main connection (has target_db from ATTACH).
-            // Run CTAS on a separate connection to avoid Quack's
-            // "Multiple streaming scans" limitation.
             let tableNames: string[] = [];
             if (isRemote) {
-              const allTables = (
-                await connection.runAndReadAll("SHOW ALL TABLES;")
-              ).getRowObjectsJson();
-              tableNames = allTables
-                .filter(
-                  (t: Record<string, unknown>) => t.database === "target_db",
-                )
-                .map((t: Record<string, unknown>) => t.name as string);
+              // No ATTACH for persist — enumerate via quack_query
+              const allTables = await runRemoteQuery(
+                credentials,
+                "SHOW ALL TABLES;",
+              );
+              tableNames = allTables.map(
+                (t: Record<string, unknown>) => t.name as string,
+              );
             } else {
               const localTables = (
                 await connection.runAndReadAll(
