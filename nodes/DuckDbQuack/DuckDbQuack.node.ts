@@ -1141,8 +1141,27 @@ export class DuckDbQuack implements INodeType {
             });
           } else if (isRemote) {
             // Remote persist: run entirely server-side via quack_query.
-            let sql = `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`;
+            // Pre-check: if overwrite is disabled, verify target file is empty.
+            if (!overwrite) {
+              const checkResult = await runRemoteQuery(
+                credentials,
+                `ATTACH '${dest.replace(/'/g, "''")}' AS _preflight; SELECT count(*) AS cnt FROM information_schema.tables WHERE table_schema='main'; DETACH _preflight;`,
+              );
+              const cnt = Number(
+                (checkResult[0] as Record<string, unknown> | undefined)
+                  ?.cnt ?? 0,
+              );
+              if (cnt > 0) {
+                throw new NodeOperationError(
+                  this.getNode(),
+                  `Target file already contains ${cnt} table(s): ${dest}. Enable "Force Overwrite" to replace them.`,
+                  { itemIndex: 0 },
+                );
+              }
+            }
+
             const createKeyword = overwrite ? "CREATE OR REPLACE" : "CREATE TABLE IF NOT EXISTS";
+            let sql = `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`;
             for (const name of tableNames) {
               sql += `${createKeyword} disk_db.main.${name} AS SELECT * FROM ${name};`;
             }
