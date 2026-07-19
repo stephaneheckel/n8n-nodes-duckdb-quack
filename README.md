@@ -7,6 +7,8 @@
 ## The n8n-nodes-duckdb-quack Project !
 The `n8n-nodes-duckdb-quack` repository is a community-built custom node for the n8n automation platform. It integrates DuckDB — a high-performance, in-process analytical database engine — directly into n8n workflows.
 
+![Example workflow: trigger → generate test items → write to DuckDB table](assets/workflow-example.png)
+
 ### High-Level Features
 
 - **In-Workflow Analytical Querying:** It allows n8n workflows to execute fast, analytical SQL queries directly on tabular data, acting as an embedded, serverless database node.
