@@ -144,8 +144,9 @@ Multiple credentials with `:memory:` share the same database instance, just like
 
 **Option 1: WSL2 (recommended for Windows development)**
 
-1. From a WSL2 terminal, start DuckDB:
+1. Install DuckDB CLI in WSL2 and start it:
    ```bash
+   curl https://install.duckdb.org | sh
    export PATH="$HOME/.duckdb/cli/latest:$PATH"
    duckdb
    ```
