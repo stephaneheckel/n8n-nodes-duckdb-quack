@@ -628,7 +628,8 @@ export class DuckDbQuack implements INodeType {
       const isRemote = credentials.connectionType === "remote";
       const needsAttach =
         isRemote &&
-        (resource === "query" ||
+        ((resource === "query" &&
+          this.getNodeParameter("operation", 0) !== "persist") ||
           (resource === "table" &&
             ["write", "update", "delete", "read"].includes(
               this.getNodeParameter("operation", 0) as string,
