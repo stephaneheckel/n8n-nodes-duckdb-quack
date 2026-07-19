@@ -1113,15 +1113,14 @@ export class DuckDbQuack implements INodeType {
           await connection.run(
             `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`,
           );
-          // Use a separate connection for data operations: the Quack ATTACH
-          // on the main connection is treated as a streaming context, and
-          // CTAS fails with "Multiple streaming scans" if run on the same handle.
-          const copyConn = await instance.connect();
           try {
+            // Enumerate tables on main connection (has target_db from ATTACH).
+            // Run CTAS on a separate connection to avoid Quack's
+            // "Multiple streaming scans" limitation.
             let tableNames: string[] = [];
             if (isRemote) {
               const allTables = (
-                await copyConn.runAndReadAll("SHOW ALL TABLES;")
+                await connection.runAndReadAll("SHOW ALL TABLES;")
               ).getRowObjectsJson();
               tableNames = allTables
                 .filter(
@@ -1130,7 +1129,7 @@ export class DuckDbQuack implements INodeType {
                 .map((t: Record<string, unknown>) => t.name as string);
             } else {
               const localTables = (
-                await copyConn.runAndReadAll(
+                await connection.runAndReadAll(
                   "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
                 )
               ).getRowObjectsJson();
@@ -1138,35 +1137,42 @@ export class DuckDbQuack implements INodeType {
                 (t: Record<string, unknown>) => t.table_name as string,
               );
             }
-            let copied = 0;
-            for (const name of tableNames) {
-              await copyConn.run(
-                `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM ${sourceSchema}.${name};`,
-              );
-              copied++;
+
+            if (tableNames.length === 0) {
+              returnData.push({
+                json: {
+                  success: false,
+                  message: "No tables found — nothing to persist",
+                } as unknown as IDataObject,
+                pairedItem: { item: 0 },
+              });
+            } else {
+              const copyConn = await instance.connect();
+              try {
+                let copied = 0;
+                for (const name of tableNames) {
+                  await copyConn.run(
+                    `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM ${sourceSchema}.${name};`,
+                  );
+                  copied++;
+                }
+                returnData.push({
+                  json: {
+                    success: true,
+                    message: `Saved ${copied} tables to ${dest}`,
+                  } as unknown as IDataObject,
+                  pairedItem: { item: 0 },
+                });
+              } finally {
+                copyConn.closeSync();
+              }
             }
-            returnData.push({
-              json: {
-                success: copied > 0,
-                message:
-                  copied > 0
-                    ? `Saved ${copied} tables to ${dest}`
-                    : `No tables found in memory — nothing to persist`,
-              } as unknown as IDataObject,
-              pairedItem: { item: 0 },
-            });
           } finally {
-            try {
-              copyConn.closeSync();
-            } catch (_e) {
-              /* ignore */
-            }
             try {
               await connection.run(`DETACH disk_db;`);
             } catch (_e) {
-              /* ignore detach errors */
+              /* ignore */
             }
-            // Evict stale cache entry so next access gets fresh data
             instanceCache.delete(dest);
           }
         } else if (op === "select") {
