@@ -1075,10 +1075,15 @@ export class DuckDbQuack implements INodeType {
         const op = this.getNodeParameter("operation", 0) as string;
 
         if (op === "persist") {
-          if (isRemote || (credentials.filePath as string) !== ":memory:") {
+          // Remote: persist tables from the Quack-attached database.
+          // Local: only :memory: can be persisted (file-backed DBs are already on disk).
+          if (
+            !isRemote &&
+            (credentials.filePath as string) !== ":memory:"
+          ) {
             throw new NodeOperationError(
               this.getNode(),
-              'Persist Memory to Disk requires Connection Mode to be "Local" and File Path set to ":memory:".',
+              'Local Persist Memory to Disk requires File Path set to ":memory:".',
               { itemIndex: 0 },
             );
           }
@@ -1102,19 +1107,24 @@ export class DuckDbQuack implements INodeType {
             }
           }
 
+          // For remote, tables live in target_db.main; for local, in main.
+          const sourceSchema = isRemote ? "target_db.main" : "main";
+
           await connection.run(
             `ATTACH '${dest.replace(/'/g, "''")}' AS disk_db;`,
           );
           try {
             const tablesResult = await connection.runAndReadAll(
-              "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
+              isRemote
+                ? "SELECT table_name FROM target_db.information_schema.tables WHERE table_schema='main';"
+                : "SELECT table_name FROM information_schema.tables WHERE table_schema='main';",
             );
             const tables = tablesResult.getRowObjectsJson();
             let copied = 0;
             for (const t of tables) {
               const name = t.table_name as string;
               await connection.run(
-                `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM main.${name};`,
+                `CREATE TABLE IF NOT EXISTS disk_db.main.${name} AS SELECT * FROM ${sourceSchema}.${name};`,
               );
               copied++;
             }
