@@ -1143,9 +1143,10 @@ export class DuckDbQuack implements INodeType {
             // Remote persist: run entirely server-side via quack_query.
             // Pre-check: if overwrite is disabled, verify target file is empty.
             if (!overwrite) {
+              const alias = `_check_${Date.now()}`;
               const checkResult = await runRemoteQuery(
                 credentials,
-                `ATTACH '${dest.replace(/'/g, "''")}' AS _preflight; SELECT count(*) AS cnt FROM _preflight.information_schema.tables WHERE table_schema='main'; DETACH _preflight;`,
+                `ATTACH '${dest.replace(/'/g, "''")}' AS ${alias}; SELECT count(*) AS cnt FROM ${alias}.information_schema.tables WHERE table_schema='main'; DETACH ${alias};`,
               );
               const cnt = Number(
                 (checkResult[0] as Record<string, unknown> | undefined)
