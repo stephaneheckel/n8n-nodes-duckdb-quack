@@ -33,7 +33,7 @@ services:
     command: |
       sh -c "
       mkdir -p /shared && chown -R node:node /shared &&
-      npm install @duckdb/node-api@1.5 &&
+      npm install @duckdb/node-api &&
       cat << 'EOF' > server.mjs
       import { DuckDBInstance } from '@duckdb/node-api';
       import process from 'node:process';
