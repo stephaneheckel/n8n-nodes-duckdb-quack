@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   duckdb-server:
-    image: node:20-slim
+    image: node:24-slim
     container_name: duckdb-quack-server
     restart: unless-stopped
     ports:
