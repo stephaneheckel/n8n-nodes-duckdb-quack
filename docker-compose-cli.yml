@@ -59,10 +59,7 @@ services:
         echo \"  📁 $$f\";
       done &&
       echo 'Starting Quack server on port '$${QUACK_PORT}'...' &&
-      ./duckdb -c \"
-        LOAD quack;
-        CALL quack_serve('quack:0.0.0.0:' || getenv('QUACK_PORT'), token := getenv('QUACK_TOKEN'), allow_other_hostname := true);
-      \"
+      { echo \"LOAD quack; CALL quack_serve('quack:0.0.0.0:' || getenv('QUACK_PORT'), token := getenv('QUACK_TOKEN'), allow_other_hostname := true);\"; cat; } | ./duckdb
       "
 
 volumes:
