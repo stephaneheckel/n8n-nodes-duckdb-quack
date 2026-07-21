@@ -1,0 +1,70 @@
+version: '3.8'
+
+# Variant using the DuckDB CLI binary (linux_amd64 / glibc).
+# Use this when you need community extensions not available for musl
+# (e.g., altertable, gsheets).
+#
+# Pros: full ~80 community extensions, smaller image
+# Cons: startup downloads DuckDB CLI (~30MB), no Node.js tooling
+#
+# The default docker-compose.yml uses @duckdb/node-api (npm) which bundles
+# a musl-compiled DuckDB — only ~5 community extensions are available there.
+
+services:
+  duckdb-server:
+    image: debian:bookworm-slim
+    container_name: duckdb-quack-server-cli
+    restart: unless-stopped
+    ports:
+      - "9494:9494"
+    environment:
+      - QUACK_TOKEN=${QUACK_TOKEN:-super_secret_token_1234}
+      - QUACK_PORT=9494
+      - DB_DIR=/shared
+      - DUCKDB_VERSION=${DUCKDB_VERSION:-1.5.4}
+    volumes:
+      - '/data/shared-duckdb:/shared'
+      - duckdb-extensions:/root/.duckdb
+    working_dir: /app
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9494 &>/dev/null'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    command: |
+      sh -c "
+      apt-get update &&
+      apt-get install -y unzip &&
+      mkdir -p /shared &&
+      mkdir -p /app &&
+      cd /app &&
+      echo 'Downloading DuckDB CLI v'\"$${DUCKDB_VERSION}\"'...' &&
+      curl -fL -o duckdb.zip \"https://github.com/duckdb/duckdb/releases/download/v$${DUCKDB_VERSION}/duckdb_cli-linux-amd64.zip\" &&
+      unzip -o duckdb.zip &&
+      chmod +x duckdb &&
+      echo 'Installing quack extension...' &&
+      echo \"INSTALL quack;\" | ./duckdb &&
+      echo 'Scanning for .db files in '$${DB_DIR}'...' &&
+      find $${DB_DIR} -maxdepth 1 -name '*.db' -type f | sort | while read f; do
+        echo \"  📁 $$f\";
+      done &&
+      echo 'Starting Quack server on port '$${QUACK_PORT}'...' &&
+      ./duckdb -c \"
+        LOAD quack;
+        CALL quack_serve('quack:0.0.0.0:' || getenv('QUACK_PORT'), token := getenv('QUACK_TOKEN'), allow_other_hostname := true);
+      \"
+      "
+
+volumes:
+  duckdb-extensions:
+    driver: local
