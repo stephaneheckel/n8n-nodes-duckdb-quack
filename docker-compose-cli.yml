@@ -44,7 +44,7 @@ services:
     command: |
       sh -c "
       apt-get update &&
-      apt-get install -y unzip &&
+      apt-get install -y curl unzip &&
       mkdir -p /shared &&
       mkdir -p /app &&
       cd /app &&
