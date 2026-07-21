@@ -156,7 +156,7 @@ This node has been tested on the following configurations:
 
 The repository includes a self-contained `docker-compose.yml` that starts a persistent Quack server with automatic `.db` file discovery.
 
-> **Note**: The compose file uses `node:24-slim` as its base image. If you encounter issues with DuckDB community extensions (HTTP 404), consider switching to `node:24-bookworm-slim` which uses glibc and has full extension availability. See [DuckDB platform compatibility](https://duckdb.org/docs/stable/extensions/troubleshooting) for details.
+> **Note**: The DuckDB binary bundled with `@duckdb/node-api` uses musl. Community extensions may not be available — the Docker base image does not affect extension platform resolution. See [DuckDB platform compatibility](https://duckdb.org/docs/stable/extensions/troubleshooting) for details.
 
 1. In your **Coolify** dashboard, add a new service and use `docker-compose.yml` directly for your compose file. Redeploys do not destroy data — volumes persist across restarts.
 
