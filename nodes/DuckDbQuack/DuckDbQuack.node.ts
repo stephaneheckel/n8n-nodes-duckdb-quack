@@ -727,7 +727,7 @@ export class DuckDbQuack implements INodeType {
         // Retry transient failures (server restart, WSL2 network timing)
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            const result = await connection.runAndReadAll(
+            const result = await connection.streamAndReadAll(
               `FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`,
             );
             return result.getRowObjectsJson();
