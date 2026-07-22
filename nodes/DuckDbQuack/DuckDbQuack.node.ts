@@ -679,7 +679,7 @@ export class DuckDbQuack implements INodeType {
           await connection.run(
             `COPY (${sql}) TO '${tmpFile.replace(/'/g, "''")}' (FORMAT 'PARQUET');`,
           );
-          const fileBuffer = fs.readFileSync(tmpFile);
+          const fileBuffer = await fs.promises.readFile(tmpFile);
           const binaryData = await this.helpers.prepareBinaryData(
             fileBuffer,
             filename,
