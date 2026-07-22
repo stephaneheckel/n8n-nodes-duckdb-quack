@@ -1316,7 +1316,7 @@ export class DuckDbQuack implements INodeType {
             ? `, token := '${token.replace(/'/g, "''")}'`
             : "";
           const sslArg = disableSsl ? ", disable_ssl := true" : "";
-          const result = await connection.runAndReadAll(
+          const result = await connection.streamAndReadAll(
             `FROM quack_query('${host.replace(/'/g, "''")}', '${escapedSql}'${tokenArg}${sslArg});`,
           );
           const rows = result.getRowObjectsJson();
