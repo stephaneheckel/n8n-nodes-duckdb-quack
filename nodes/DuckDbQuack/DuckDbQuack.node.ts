@@ -945,42 +945,50 @@ export class DuckDbQuack implements INodeType {
                 // Local: use appender for efficiency
                 const appender = await connection.createAppender(table);
                 let inserted = 0;
-                for (let i = 0; i < items.length; i++) {
-                  const row = items[i].json;
-                  try {
-                    for (const col of columns) {
-                      const val = row[col];
-                      if (val === undefined || val === null) {
-                        appender.appendNull();
-                      } else {
-                        appender.appendVarchar(String(val));
+                let appenderClosed = false;
+                try {
+                  for (let i = 0; i < items.length; i++) {
+                    const row = items[i].json;
+                    try {
+                      for (const col of columns) {
+                        const val = row[col];
+                        if (val === undefined || val === null) {
+                          appender.appendNull();
+                        } else {
+                          appender.appendVarchar(String(val));
+                        }
                       }
+                      appender.endRow();
+                      inserted++;
+                    } catch (itemError) {
+                      if (this.continueOnFail()) {
+                        returnData.push({
+                          json: {
+                            error: (itemError as Error).message,
+                          } as unknown as IDataObject,
+                          error: itemError as NodeOperationError,
+                          pairedItem: { item: i },
+                        });
+                        continue;
+                      }
+                      throw new NodeApiError(
+                        this.getNode(),
+                        itemError as unknown as JsonObject,
+                        { itemIndex: i },
+                      );
                     }
-                    appender.endRow();
-                    inserted++;
-                  } catch (itemError) {
-                    if (this.continueOnFail()) {
-                      returnData.push({
-                        json: {
-                          error: (itemError as Error).message,
-                        } as unknown as IDataObject,
-                        error: itemError as NodeOperationError,
-                        pairedItem: { item: i },
-                      });
-                      continue;
-                    }
-                    throw new NodeApiError(
-                      this.getNode(),
-                      itemError as unknown as JsonObject,
-                      { itemIndex: i },
-                    );
+                  }
+                  appender.closeSync();
+                  appenderClosed = true;
+                  returnData.push({
+                    json: { rows_inserted: inserted } as unknown as IDataObject,
+                    pairedItem: { item: 0 },
+                  });
+                } finally {
+                  if (!appenderClosed) {
+                    try { appender.closeSync(); } catch (_e) { /* ignore */ }
                   }
                 }
-                appender.closeSync();
-                returnData.push({
-                  json: { rows_inserted: inserted } as unknown as IDataObject,
-                  pairedItem: { item: 0 },
-                });
               }
             }
           }
