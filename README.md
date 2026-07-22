@@ -342,6 +342,18 @@ Intermediate statement failures (e.g., index already exists) are displayed in th
 
 Core extension `httpfs` loads automatically. Additional extensions via comma-separated list: `spatial, fts, sqlite_scanner`. Community repo syntax: `gsheets FROM community`. DuckDB's JIT autoload is enabled by default.
 
+### Execution Model: Streaming vs Materialization
+
+High-volume data queries use DuckDB's streaming protocol (`streamAndReadAll`) for chunked transfer and lower memory footprint. Metadata operations (table lists, DESCRIBE, COUNT) use `runAndReadAll` since results are tiny.
+
+| Operation | Protocol |
+|-----------|----------|
+| Read Table (JSON) | `streamAndReadAll` |
+| Custom SQL (remote `quack_query`) | `streamAndReadAll` |
+| Stateless Quack Query | `streamAndReadAll` |
+| File export (Parquet/CSV) | DuckDB `COPY TO` (direct engine→disk, zero memory) |
+| Table lists, DESCRIBE, COUNT | `runAndReadAll` (metadata, small results) |
+
 ## License
 
 MIT
