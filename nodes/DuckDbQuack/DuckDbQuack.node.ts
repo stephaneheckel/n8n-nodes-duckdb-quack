@@ -844,7 +844,7 @@ export class DuckDbQuack implements INodeType {
           } else {
             const rows = isRemote
               ? await runRemoteQuery(credentials, sql)
-              : (await connection.runAndReadAll(`${sql};`)).getRowObjectsJson();
+              : (await connection.streamAndReadAll(`${sql};`)).getRowObjectsJson();
             for (const row of rows) {
               returnData.push({
                 json: row as unknown as IDataObject,
