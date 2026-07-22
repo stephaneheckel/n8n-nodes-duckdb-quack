@@ -656,13 +656,23 @@ export class DuckDbQuack implements INodeType {
             );
             break;
           } catch (error) {
-            if (attempt === 2) throw error;
-            try {
-              await connection.run(`DETACH target_db;`);
-            } catch (_e2) {
-              /* ignore */
+            const msg = (error as Error).message;
+            if (
+              attempt < 2 &&
+              (msg.includes("Invalid connection id") ||
+                (msg.includes("Invalid Input Error") &&
+                  !msg.includes("Authentication")) ||
+                msg.includes("IO Error"))
+            ) {
+              try {
+                await connection.run(`DETACH target_db;`);
+              } catch (_e2) {
+                /* ignore */
+              }
+              await new Promise((resolve) => setTimeout(resolve, 200));
+              continue;
             }
-            await new Promise((resolve) => setTimeout(resolve, 200));
+            throw error;
           }
         }
         await connection.run(`USE target_db;`);
