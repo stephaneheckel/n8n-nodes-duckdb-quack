@@ -648,6 +648,8 @@ export class DuckDbQuack implements INodeType {
           );
         }
         const sslFlag = disableSsl ? ", DISABLE_SSL true" : "";
+        // Clean up any leaked alias from a previous execution
+        try { await connection.run(`DETACH target_db;`); } catch (_e) { /* not attached, fine */ }
         // Retry ATTACH: same pattern as runRemoteQuery (3 attempts, 200ms delay)
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
