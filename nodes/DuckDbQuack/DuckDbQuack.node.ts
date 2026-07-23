@@ -854,14 +854,52 @@ export class DuckDbQuack implements INodeType {
               });
             }
           } else {
-            const rows = isRemote
-              ? await runRemoteQuery(credentials, sql)
-              : (await connection.streamAndReadAll(`${sql};`)).getRowObjectsJson();
-            for (const row of rows) {
-              returnData.push({
-                json: row as unknown as IDataObject,
-                pairedItem: { item: 0 },
-              });
+            // JSON output — per-item: each item uses its own WHERE/LIMIT/ORDER BY
+            for (let i = 0; i < items.length; i++) {
+              const itemWhere = this.getNodeParameter(
+                "whereClause", i, "",
+              ) as string;
+              const itemLimit = this.getNodeParameter("limit", i, "") as
+                | number
+                | string;
+              const itemGroupBy = this.getNodeParameter(
+                "groupBy", i, "",
+              ) as string;
+              const itemOrderBy = this.getNodeParameter(
+                "orderBy", i, "",
+              ) as string;
+
+              let itemSql = `SELECT * FROM ${table}`;
+              if (itemWhere && itemWhere.trim()) {
+                itemSql += ` WHERE ${itemWhere.trim()}`;
+              }
+              if (itemGroupBy && itemGroupBy.trim()) {
+                itemSql += ` GROUP BY ${itemGroupBy.trim()}`;
+              }
+              if (itemOrderBy && itemOrderBy.trim()) {
+                itemSql += ` ORDER BY ${itemOrderBy.trim()}`;
+              }
+              if (itemLimit && Number(itemLimit) > 0) {
+                itemSql += ` LIMIT ${Number(itemLimit)}`;
+              }
+
+              const rows = isRemote
+                ? await runRemoteQuery(credentials, itemSql)
+                : (await connection.streamAndReadAll(`${itemSql};`)).getRowObjectsJson();
+              if (rows.length > 0) {
+                for (const row of rows) {
+                  returnData.push({
+                    json: row as unknown as IDataObject,
+                    pairedItem: { item: i },
+                  });
+                }
+              } else {
+                // Emit empty object so isEmpty() returns true for IF routing
+                returnData.push({
+                  json: {} as IDataObject,
+                  pairedItem: { item: i },
+                });
+              }
             }
           }
         } else if (op === "write") {
