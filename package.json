@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-duckdb-quack",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "description": "n8n community node for local DuckDB files and high-performance remote Quack servers — in-process OLAP with HTTP/2 streaming vectors",
   "license": "MIT",
   "homepage": "https://github.com/stephaneheckel/n8n-nodes-duckdb-quack#readme",
