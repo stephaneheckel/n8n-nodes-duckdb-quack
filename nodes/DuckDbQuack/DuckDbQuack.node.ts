@@ -964,6 +964,8 @@ export class DuckDbQuack implements INodeType {
                         const val = row[col];
                         if (val === undefined || val === null) {
                           appender.appendNull();
+                        } else if (typeof val === "object") {
+                          appender.appendVarchar(JSON.stringify(val));
                         } else {
                           appender.appendVarchar(String(val));
                         }
