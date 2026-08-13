@@ -343,6 +343,17 @@ Intermediate statement failures (e.g., index already exists) are displayed in th
 
 > **⚠️ Statement splitting:** multi-statement blocks are split on `;` characters. Avoid semicolons inside string literals (`'a;b'`) or comments (`-- notes;`).
 
+> **⚠️ Parquet/CSV export and trailing semicolons:** when **Select (Custom SQL)** is set to **Output Format = Parquet or CSV**, the node wraps the query in `COPY (…) TO 'file' (FORMAT …)`. End the query **without** a trailing semicolon — a stray `;` lands inside the `COPY` parentheses and DuckDB fails with `Parser Error: syntax error at or near ";"`.
+>
+> ```sql
+> -- ✅ works
+> SELECT * FROM read_csv('/shared/employee.csv', header = true, delim = ',')
+> -- ❌ parser error (trailing ';')
+> SELECT * FROM read_csv('/shared/employee.csv', header = true, delim = ',');
+> ```
+>
+> JSON output is unaffected (trailing `;` is tolerated there).
+
 ### Extension Loading
 
 Core extension `httpfs` loads automatically. Additional extensions via comma-separated list: `spatial, fts, sqlite_scanner`. Community repo syntax: `gsheets FROM community`. DuckDB's JIT autoload is enabled by default.
