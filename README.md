@@ -121,6 +121,16 @@ The node uses two approaches for remote Quack queries:
 
 This avoids the "Multiple streaming scans" Quack protocol limitation.
 
+**Remote Paths**
+
+In remote (Quack) mode, the SQL executes **on the server**, so file paths in queries (e.g. `read_csv()`, `COPY ... TO`) must be **server-side paths**. On WSL2, a Windows path like `c:\tmp\products.csv` is visible inside WSL as `/mnt/c/tmp/products.csv` — this only makes sense when **both n8n and WSL run on the same Windows machine**. For multi-machine or container deployments, prefer a shared server directory instead (e.g. `/home/steph/shared-duckdb/` or the server's `/shared` volume).
+
+| Mode | Path to use | Example |
+|------|-------------|---------|
+| Local | Windows path as-is | `read_csv('c:\tmp\products.csv')` |
+| Remote (WSL2, same machine) | `/mnt/c/...` | `read_csv('/mnt/c/tmp/products.csv')` |
+| Remote (recommended) | Shared server dir | `read_csv('/home/steph/shared-duckdb/products.csv')` |
+
 ### Server Resource
 
 | Operation | Description | Local | Remote |
