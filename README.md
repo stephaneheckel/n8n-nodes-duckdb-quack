@@ -380,7 +380,18 @@ DuckDB v2.0 ("Cyanoptera") is scheduled for **September 2026** ([preview post](h
 - **Storage format v2.0**: existing `.duckdb` files need migration (back up before upgrading).
 - **Protocol compatibility 1.5 ↔ 2.0** must be validated before upgrading any Quack server used by live workflows (WSL2 / Termux / Docker).
 
-The node stays on the 1.5.x protocol until v2.0.0 is released and validated — tracked in [#1](https://github.com/stephaneheckel/n8n-nodes-duckdb-quack/issues/1).
+The node stays on the 1.5.x protocol until v2.0.0 is released and validated.
+
+### Release & Maintenance Strategy
+
+- **One repo, one npm package — no fork.** The 1.5.x line and the v2 line live in the same package, separated by semver:
+  - `main` → v2 support (CONNECT, `@duckdb/node-api` v2), published as **1.0.0** (or under a `next` dist-tag first, promoted once proven).
+  - branch `release/0.1.x` → the 1.5.x line; real bug fixes backported and published as `0.1.2x`.
+  - npm `latest` stays on the 0.1.x line until v2 is validated against the production setup, then flips to 1.0.x.
+- **Parallel v2 environment**: a v2 Quack server runs side by side with the production 1.5.x servers (separate container/port); the node selects the server via credentials (host/port). WSL2 / Termux stay on 1.5.x until migrated.
+- Users on the 1.5.x line are unaffected — version pinning (`^0.1.x`) never crosses the major boundary.
+
+Tracked in [#1](https://github.com/stephaneheckel/n8n-nodes-duckdb-quack/issues/1).
 
 ## License
 
