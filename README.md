@@ -370,6 +370,18 @@ High-volume data queries use DuckDB's streaming protocol (`streamAndReadAll`) fo
 | File export (Parquet/CSV) | DuckDB `COPY TO` (direct engine→disk, zero memory) |
 | Table lists, DESCRIBE, COUNT | `runAndReadAll` (metadata, small results) |
 
+## DuckDB v2.0 — Migration Roadmap
+
+DuckDB v2.0 ("Cyanoptera") is scheduled for **September 2026** ([preview post](https://duckdb.org/2026/08/17/duckdb-20-highlights.html)). It graduates the Quack extension from beta to **stable** and introduces the `CONNECT` statement as the official successor to the `remote.query()` / `quack_query()` workaround. Expected impact on this node:
+
+- **Stateless Quack Query** (`quack_query(...)`): migrate to `ATTACH 'quack:...' AS qk (TOKEN '...')` + `CONNECT qk` + `SELECT ...` — native streaming, which may remove the need for the ATTACH-bypass.
+- **Stateful path**: `CREATE SECRET` + `ATTACH ... (TYPE quack)` + `USE` → `ATTACH ... (TOKEN ...)` + `CONNECT` / `DISCONNECT`.
+- **`@duckdb/node-api`**: the v2 C API rework requires a major version bump of the Node bindings — tracked once stable.
+- **Storage format v2.0**: existing `.duckdb` files need migration (back up before upgrading).
+- **Protocol compatibility 1.5 ↔ 2.0** must be validated before upgrading any Quack server used by live workflows (WSL2 / Termux / Docker).
+
+The node stays on the 1.5.x protocol until v2.0.0 is released and validated — tracked in [#1](https://github.com/stephaneheckel/n8n-nodes-duckdb-quack/issues/1).
+
 ## License
 
 MIT
